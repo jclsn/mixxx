@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Mark Hills <mark@xwax.org>
+ * Copyright (C) 2024 Mark Hills <mark@xwax.org>
  *
  * This file is part of "xwax".
  *
@@ -26,10 +26,21 @@
  * of the hash lookup table, and hence the amount of chaining */
 
 #define HASH_BITS 16
-
-#define HASH(timecode) ((timecode) & ((1 << HASH_BITS) - 1))
 #define NO_SLOT ((unsigned)-1)
 
+unsigned short HASH(bits_t value) {
+    // Mix the upper and lower parts of the 112-bit number
+    unsigned long long upper = (value >> 64) & 0xFFF; // Top 6 bits (112 - 64 = 48, so we take 12 bits only)
+    unsigned long long lower = (unsigned long long)value; // Lower 64 bits
+
+    // Simple hash mixing using bit shifts and XORs
+    unsigned short hash = (unsigned short)(lower ^ (lower >> 16) ^ (lower >> 32) ^ (lower >> 48));
+    hash ^= (unsigned short)(upper ^ (upper << 5) ^ (upper >> 3));
+
+    // Final scrambling to improve distribution
+    hash ^= (hash >> 7) ^ (hash << 9);
+    return hash;
+}
 
 /* Initialise an empty hash lookup table to store the given number
  * of timecode -> position lookups */
@@ -46,13 +57,13 @@ int lut_init(struct lut *lut, int nslots)
             " (%d slots per hash, %zuKb)\n",
             hashes, nslots, nslots / hashes, bytes / 1024);
 
-    lut->slot = (struct slot*)(malloc(sizeof(struct slot) * nslots));
+    lut->slot = malloc(sizeof(struct slot) * nslots);
     if (lut->slot == NULL) {
         perror("malloc");
         return -1;
     }
 
-    lut->table = (slot_no_t*)(malloc(sizeof(slot_no_t) * hashes));
+    lut->table = malloc(sizeof(slot_no_t) * hashes);
     if (lut->table == NULL) {
         perror("malloc");
         return -1;
@@ -74,7 +85,7 @@ void lut_clear(struct lut *lut)
 }
 
 
-void lut_push(struct lut *lut, unsigned int timecode)
+void lut_push(struct lut *lut, bits_t timecode)
 {
     unsigned int hash;
     slot_no_t slot_no;
@@ -90,8 +101,7 @@ void lut_push(struct lut *lut, unsigned int timecode)
     lut->table[hash] = slot_no;
 }
 
-
-unsigned int lut_lookup(struct lut *lut, unsigned int timecode)
+bits_t lut_lookup(struct lut *lut, bits_t timecode)
 {
     unsigned int hash;
     slot_no_t slot_no;
@@ -102,10 +112,16 @@ unsigned int lut_lookup(struct lut *lut, unsigned int timecode)
 
     while (slot_no != NO_SLOT) {
         slot = &lut->slot[slot_no];
-        if (slot->timecode == timecode)
+        if (slot->timecode == timecode) {
+            /* 
+             * Uncomment to print a confirmation when the LFSR state was found in the LUT 
+             */
+            /* printf("Found in LUT!\n\n"); */
             return slot_no;
+        } 
+
         slot_no = slot->next;
     }
 
-    return (unsigned)-1;
+    return (bits_t)-1;
 }
