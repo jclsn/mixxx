@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Mark Hills <mark@xwax.org>
+ * Copyright (C) 2024 Mark Hills <mark@xwax.org>
  *
  * This file is part of "xwax".
  *
@@ -21,18 +21,19 @@
 #define TIMECODER_H
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdlib.h>
 
 #include "lut.h"
 #include "pitch.h"
+#include "delayline.h"
 
 #define TIMECODER_CHANNELS 2
 
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
-
-typedef unsigned int bits_t;
-
+      
 struct timecode_def {
     const char *name, *desc;
     int bits, /* number of bits in string */
@@ -51,6 +52,20 @@ struct timecoder_channel {
 	swapped; /* wave recently swapped polarity */
     signed int zero;
     unsigned int crossing_ticker; /* samples since we last crossed zero */
+
+    int ref_level;
+
+    /* For MK2 demodulation */
+    struct delayline delayline;
+    struct delayline delayline_deriv;
+
+    int last_upper_reading[2], last_lower_reading[2];
+    int jump_upper, jump_lower;
+    int lower_reading, upper_reading;
+    int avg_upper_reading, avg_lower_reading;
+    int deriv, deriv_old;
+    int ema, ema_old;
+    int upper_avg_slope, lower_avg_slope;
 };
 
 struct timecoder {
@@ -71,7 +86,7 @@ struct timecoder {
     /* Numerical timecode */
 
     signed int ref_level;
-    bits_t bitstream, /* actual bits from the record */
+    bits_t bitstream, error_mask, /* actual bits from the record */
         timecode; /* corrected timecode */
     unsigned int valid_counter, /* number of successful error checks */
         timecode_ticker; /* samples since valid timecode was read */
@@ -80,6 +95,17 @@ struct timecoder {
 
     unsigned char *mon; /* x-y array */
     int mon_size, mon_counter;
+
+    /* Last reading level to compare the current to using the MK_OFFSET_FACTOR */
+    bits_t lower_bit, upper_bit;
+
+    int reading_type;
+
+    bits_t upper_bitstream, lower_bitstream, upper_bitstream2, lower_bitstream2;
+    bits_t upper_timecode, lower_timecode, upper_timecode2, lower_timecode2;
+    unsigned int upper_valid_counter, lower_valid_counter, upper_valid_counter2, lower_valid_counter2;
+    bool lower_bit_flipped, upper_bit_flipped;
+    int upper_corrected_bits, lower_corrected_bits;
 };
 
 struct timecode_def* timecoder_find_definition(const char *name);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Mark Hills <mark@xwax.org>
+ * Copyright (C) 2024 Mark Hills <mark@xwax.org>
  *
  * This file is part of "xwax".
  *
@@ -17,6 +17,19 @@
  *
  */
 
+/*
+ * IMPORTANT
+ *
+ * This open source license comes with certain obligations.  In
+ * particular, it does not permit the copying of this code into
+ * proprietary software. This requires a separate license.
+ *
+ * If you wish to incorporate timecode functionality into software
+ * which is not compatible with this license, contact the author for
+ * information.
+ *
+ */
+
 #include <assert.h>
 #include <limits.h>
 #include <stdio.h>
@@ -27,7 +40,16 @@
 #endif
 
 #include "debug.h"
+#include "delayline.h"
+#include "filters.h"
+#include "lut.h"
 #include "timecoder.h"
+
+/*
+ * Uncomment to use the plotting script 
+ */
+
+/* #define MK2_PLOT */
 
 #define ZERO_THRESHOLD (128 << 16)
 
@@ -35,11 +57,20 @@
 
 #define REF_PEAKS_AVG 48 /* in wave cycles */
 
+/* Factor used by the Traktor MK2 by which the sinusoid is offset during 
+ * offset modulation */
+
+#define MK2_OFFSET_FACTOR 3.75
+#define FILTER_DELAY 3
+#define NO_SLOT ((unsigned)-1)
+
 /* The number of correct bits which come in before the timecode is
  * declared valid. Set this too low, and risk the record skipping
  * around (often to blank areas of track) during scratching */
 
 #define VALID_BITS 24
+#define VALID_BITS_TRAKTOR_MK2 114
+#define VALID_BITS2_TRAKTOR_MK2 1
 
 #define MONITOR_DECAY_EVERY 512 /* in samples */
 
@@ -51,6 +82,7 @@
 #define SWITCH_PHASE 0x1 /* tone phase difference of 270 (not 90) degrees */
 #define SWITCH_PRIMARY 0x2 /* use left channel (not right) as primary */
 #define SWITCH_POLARITY 0x4 /* read bit values in negative (not positive) */
+#define OFFSET_MODULATION 0x8 /* Use offset modulation used for Traktor MK2 timecodes */
 
 static struct timecode_def timecodes[] = {
     {
@@ -61,7 +93,7 @@ static struct timecode_def timecodes[] = {
         .seed = 0x59017,
         .taps = 0x361e4,
         .length = 712000,
-        .safe = 625000,
+        .safe = 707000,
     },
     {
         .name = "serato_2b",
@@ -71,7 +103,7 @@ static struct timecode_def timecodes[] = {
         .seed = 0x8f3c6,
         .taps = 0x4f0d8, /* reverse of side A */
         .length = 922000,
-        .safe = 908000,
+        .safe = 917000,
     },
     {
         .name = "serato_cd",
@@ -81,7 +113,7 @@ static struct timecode_def timecodes[] = {
         .seed = 0xd8b40,
         .taps = 0x34d54,
         .length = 950000,
-        .safe = 890000,
+        .safe = 940000,
     },
     {
         .name = "traktor_a",
@@ -92,7 +124,7 @@ static struct timecode_def timecodes[] = {
         .seed = 0x134503,
         .taps = 0x041040,
         .length = 1500000,
-        .safe = 605000,
+        .safe = 1480000,
     },
     {
         .name = "traktor_b",
@@ -103,7 +135,40 @@ static struct timecode_def timecodes[] = {
         .seed = 0x32066c,
         .taps = 0x041040, /* same as side A */
         .length = 2110000,
-        .safe = 907000,
+        .safe = 2090000,
+    },    
+    {
+        .name = "traktor_mk2_a",
+        .desc = "Traktor Scratch MK2, side A",
+        .resolution = 2500,
+        .flags = OFFSET_MODULATION,
+        .bits = 110,
+        .seed = UINT128(0xc6007c63e, 0x3fc00c60f8c1f00),
+        .taps = UINT128(0x400000000040, 0x0000010800000001),
+        .length = 1820000,
+        .safe = 1800000,
+    },    
+    {
+        .name = "traktor_mk2_b",
+        .desc = "Traktor Scratch MK2, side B",
+        .resolution = 2500,
+        .flags = OFFSET_MODULATION,
+        .bits = 110,
+        .seed = UINT128(0x1ff9f00003, 0xe73ff00f9fe0c7c1),
+        .taps = UINT128(0x400000000040, 0x0000010800000001),
+        .length = 2570000,
+        .safe = 2550000,
+    },    
+    {
+        .name = "traktor_mk2_cd",
+        .desc = "Traktor Scratch MK2, CD",
+        .resolution = 3000,
+        .flags = OFFSET_MODULATION,
+        .bits = 110,
+        .seed = UINT128(0x7ce73, 0xe0e0fff1fc1cf8c1),
+        .taps = UINT128(0x400000000000, 0x1000010800000001),
+        .length = 4495000,
+        .safe = 4500000,
     },
     {
         .name = "mixvibes_v2",
@@ -114,7 +179,7 @@ static struct timecode_def timecodes[] = {
         .seed = 0x22c90,
         .taps = 0x00008,
         .length = 950000,
-        .safe = 655000,
+        .safe = 923000,
     },
     {
         .name = "mixvibes_7inch",
@@ -125,7 +190,7 @@ static struct timecode_def timecodes[] = {
         .seed = 0x22c90,
         .taps = 0x00008,
         .length = 312000,
-        .safe = 238000,
+        .safe = 310000,
     },
     {
         .name = "pioneer_a",
@@ -148,7 +213,7 @@ static struct timecode_def timecodes[] = {
         .taps = 0x2ef1c,
         .length = 918500,
         .safe = 913000,
-    },
+    }
 };
 
 /*
@@ -177,12 +242,11 @@ static inline bits_t lfsr(bits_t code, bits_t taps)
 
 static inline bits_t fwd(bits_t current, struct timecode_def *def)
 {
-    bits_t l;
-
     /* New bits are added at the MSB; shift right by one */
 
-    l = lfsr(current, def->taps | 0x1);
-    return (current >> 1) | (l << (def->bits - 1));
+    bits_t l;
+    l = lfsr(current, def->taps | (bits_t) 0x1);
+    return (current >> 0x1) | (l << (def->bits - 0x1));
 }
 
 /*
@@ -192,12 +256,15 @@ static inline bits_t fwd(bits_t current, struct timecode_def *def)
 static inline bits_t rev(bits_t current, struct timecode_def *def)
 {
     bits_t l, mask;
+    bits_t one = 1;
+    bits_t taps_shifted = def->taps >> one;
+    bits_t bits_shifted = (one << (def->bits - one));
 
     /* New bits are added at the LSB; shift left one and mask */
 
-    mask = (1 << def->bits) - 1;
-    l = lfsr(current, (def->taps >> 1) | (0x1 << (def->bits - 1)));
-    return ((current << 1) & mask) | l;
+    mask = (one << def->bits) - one;
+    l = lfsr(current, taps_shifted | bits_shifted);
+    return ((current << one) & mask) | l;
 }
 
 /*
@@ -221,15 +288,13 @@ static int build_lookup(struct timecode_def *def)
 	return -1;
 
     current = def->seed;
-
     for (n = 0; n < def->length; n++) {
         bits_t next;
 
         /* timecode must not wrap */
-        assert(lut_lookup(&def->lut, current) == (unsigned)-1);
+        assert(lut_lookup(&def->lut, current) == (bits_t)-1);
         lut_push(&def->lut, current);
 
-        /* check symmetry of the lfsr functions */
         next = fwd(current, def);
         assert(rev(next, def) == current);
 
@@ -257,8 +322,17 @@ struct timecode_def* timecoder_find_definition(const char *name)
         if (strcmp(def->name, name) != 0)
             continue;
 
+        /* if (!lut_load(def)) */
+        /*     return def; */
+
         if (build_lookup(def) == -1)
             return NULL;  /* error */
+
+        /* if(lut_store(def)) { */
+        /*     timecoder_free_lookup(); */
+        /*     printf("Couldn't store LUT on disk\n"); */
+        /*     return NULL; */
+        /* } */
 
         return def;
     }
@@ -285,10 +359,20 @@ void timecoder_free_lookup(void) {
  * Initialise filter values for one channel
  */
 
-static void init_channel(struct timecoder_channel *ch)
+static void init_channel(struct timecoder *tc, struct timecoder_channel *ch)
 {
     ch->positive = false;
     ch->zero = 0;
+
+    if (tc->def->flags & OFFSET_MODULATION) {
+        delayline_init(&ch->delayline);
+        delayline_init(&ch->delayline_deriv);
+        ch->ref_level = 0;
+    }
+    ch->upper_avg_slope = INT_MAX/2;
+    ch->lower_avg_slope = INT_MAX/2;
+    ch->avg_upper_reading = INT_MAX/2;
+    ch->avg_lower_reading = INT_MIN/2;
 }
 
 /*
@@ -316,8 +400,8 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
         tc->threshold >>= 5; /* approx -36dB */
 
     tc->forwards = 1;
-    init_channel(&tc->primary);
-    init_channel(&tc->secondary);
+    init_channel(tc, &tc->primary);
+    init_channel(tc, &tc->secondary);
     pitch_init(&tc->pitch, tc->dt);
 
     tc->ref_level = INT_MAX;
@@ -326,7 +410,12 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
     tc->valid_counter = 0;
     tc->timecode_ticker = 0;
 
+    tc->upper_valid_counter = 0;
+    tc->lower_valid_counter = 0;
     tc->mon = NULL;
+
+    tc->upper_corrected_bits = 0;
+    tc->lower_corrected_bits = 0;
 }
 
 /*
@@ -351,7 +440,7 @@ int timecoder_monitor_init(struct timecoder *tc, int size)
 {
     assert(tc->mon == NULL);
     tc->mon_size = size;
-    tc->mon = (unsigned char*)(malloc(SQ(tc->mon_size)));
+    tc->mon = malloc(SQ(tc->mon_size));
     if (tc->mon == NULL) {
         perror("malloc");
         return -1;
@@ -400,7 +489,7 @@ static void detect_zero_crossing(struct timecoder_channel *ch,
  * Plot the given sample value in the x-y monitor
  */
 
-static inline void update_monitor(struct timecoder *tc, signed int x, signed int y)
+static void update_monitor(struct timecoder *tc, signed int x, signed int y)
 {
     int px, py, size, ref;
 
@@ -410,7 +499,7 @@ static inline void update_monitor(struct timecoder *tc, signed int x, signed int
     size = tc->mon_size;
     ref = tc->ref_level;
 
-    /* Decay the pixels already in the montior */
+    /* Decay the pixels already in the monitor */
 
     if (++tc->mon_counter % MONITOR_DECAY_EVERY == 0) {
         int p;
@@ -432,6 +521,240 @@ static inline void update_monitor(struct timecoder *tc, signed int x, signed int
 
     tc->mon[py * size + px] = 0xff; /* white */
 }
+
+// Print a uint128 value in binary format.
+void bits_t_print_binary(bits_t a) {
+        for (int i = 109; i >= 0; i--) 
+            printf("%u", (unsigned) (a >> i) & 0x1);
+    printf("\n");
+}
+
+#define FORWARD_FACTOR 2
+#define REVERSE_FACTOR 1.35
+#define AVG_FACTOR 1.0
+#define SECOND_FACTOR 1.05
+void detect_bit_flip(float slope[2], float avg_slope, int reading, int avg_reading, bits_t *bit, bool *bit_flipped, bool forwards, bits_t one)
+{
+    double threshold, threshold2;
+    
+
+    if (*bit_flipped == false) {
+
+        if (forwards) {
+                threshold = FORWARD_FACTOR * avg_slope;
+                threshold2 = (FORWARD_FACTOR * avg_slope) * SECOND_FACTOR;
+        } else {
+                threshold = REVERSE_FACTOR * avg_slope;
+                threshold2 = (REVERSE_FACTOR * avg_slope) * SECOND_FACTOR;
+                one = !one;
+        }
+
+	if (*bit == !one && slope[0] > threshold && slope[1] > threshold2) {
+		*bit = one;
+		*bit_flipped = true;
+	} else if (*bit == one && slope[0] < -threshold && slope[1] < -threshold2) {
+		*bit = !one;
+		*bit_flipped = true;
+	}
+    } else {
+        *bit_flipped = false;
+    }
+}
+
+#define UPPER_READING 0
+#define LOWER_READING 1
+static void process_mk2_bitstream(struct timecoder *tc, signed int reading) {
+
+    struct timecoder_channel *primary, *secondary;
+    int primary_reading, secondary_reading;
+    float current_slope[2], last_slope;
+    bits_t one;
+
+        primary = &tc->primary;
+        secondary = &tc->secondary;
+
+    /* 
+     * Due to the delay of the derivative and moving average filter, the third sample after
+     * the current sample has to be taken
+     */
+
+    primary_reading = *delayline_at_index(&primary->delayline, FILTER_DELAY);
+    secondary_reading = *delayline_at_index(&secondary->delayline, FILTER_DELAY);
+
+    /* 
+     * Detect if the offset jumps up or down on primary or secondary channel.
+     * Both channels are checked to increase accuracy
+     */
+    if (primary->swapped && primary->positive)  {
+            /* Calculate absolute of lower average slope */
+	    tc->primary.lower_avg_slope = ema(abs(primary_reading - tc->primary.last_upper_reading[0]),
+					  &tc->primary.upper_avg_slope,
+					  0.01);
+
+	    primary->last_lower_reading[1] = primary->last_lower_reading[0];
+	    primary->last_lower_reading[0] = primary_reading;
+
+            /* TODO: Also process primary bitstream */
+
+	    return; 
+    } else if (primary->swapped && !primary->positive)  {
+            /* Calculate absolute of upper average slope */
+	    tc->primary.upper_avg_slope = ema(abs(primary_reading - tc->primary.last_upper_reading[0]),
+					  &tc->primary.upper_avg_slope,
+					  0.01);
+
+
+            primary->last_upper_reading[1] = primary->last_upper_reading[0];
+	    primary->last_upper_reading[0] = primary_reading;
+
+
+            /* TODO: Also process primary bitstream */
+
+	    return; 
+    } else if (secondary->swapped && secondary->positive)  {
+            /* Calculate absolute of lower average slope */
+	    tc->secondary.lower_avg_slope =
+		    ema(abs(secondary_reading - tc->secondary.last_lower_reading[0]),
+			&tc->secondary.lower_avg_slope,
+			0.01);
+
+            /* Calculate current and last slope */
+	    current_slope[0] = (float) (secondary_reading - tc->secondary.last_lower_reading[0]) / INT_MAX;
+	    current_slope[1] = (float) (secondary_reading - tc->secondary.last_lower_reading[1]) / INT_MAX;
+            last_slope = (float) secondary->lower_avg_slope / INT_MAX;
+
+            tc->secondary.avg_lower_reading = ema(secondary_reading, &tc->secondary.avg_lower_reading, 0.01);
+
+            secondary->last_lower_reading[1] = secondary->last_lower_reading[0];
+            secondary->last_lower_reading[0] = secondary_reading;
+
+            one = 0; // If the signal polarity is flipped
+
+	    /* The bits only change when an offset jump occurs. Else the previous bit is taken  */
+            detect_bit_flip(current_slope, last_slope, reading, 
+                            tc->secondary.avg_lower_reading*AVG_FACTOR, &tc->lower_bit,
+                            &tc->lower_bit_flipped, tc->forwards, one);
+
+            tc->reading_type = LOWER_READING;
+
+    } else if (secondary->swapped && !secondary->positive)  {
+            /* Calculate absolute of upper average slope */
+	    tc->secondary.upper_avg_slope =
+		    ema(abs(secondary_reading - tc->secondary.last_upper_reading[0]),
+			&tc->secondary.upper_avg_slope,
+			0.01);
+
+            /* Calculate current and last slope */
+	    current_slope[0] = (float) (secondary_reading - tc->secondary.last_upper_reading[0]) / INT_MAX;
+	    current_slope[1] = (float) (secondary_reading - tc->secondary.last_upper_reading[1]) / INT_MAX;
+
+            last_slope = (float) secondary->upper_avg_slope / INT_MAX;
+            tc->secondary.avg_upper_reading = ema(secondary_reading, &tc->secondary.avg_upper_reading, 0.01);
+            secondary->last_upper_reading[1] = secondary->last_upper_reading[0];
+            secondary->last_upper_reading[0] = secondary_reading;
+            one = 1; // If the signal polarity is normal
+
+	    /* The bits only change when an offset jump occurs. Else the previous bit is taken  */
+            detect_bit_flip(current_slope, last_slope, reading, 
+                            (int) tc->secondary.avg_upper_reading*AVG_FACTOR, &tc->upper_bit,
+                            &tc->upper_bit_flipped, tc->forwards, one);
+
+            tc->reading_type = UPPER_READING;
+
+    }
+
+    /* Process the upper and lower codes */
+    if (tc->forwards) {
+        if (tc->reading_type == UPPER_READING) {
+                tc->upper_timecode = fwd(tc->upper_timecode, tc->def);
+                tc->upper_bitstream = (tc->upper_bitstream >> (bits_t)1) + (tc->upper_bit << (tc->def->bits - (bits_t)1));
+                if (tc->upper_timecode == tc->upper_bitstream) {
+                        tc->upper_valid_counter++;
+                } else {
+                        tc->upper_timecode = tc->upper_bitstream;
+                        tc->upper_valid_counter = 0;
+                }
+
+	} else {
+                tc->lower_timecode = fwd(tc->lower_timecode, tc->def);
+                tc->lower_bitstream = (tc->lower_bitstream >> (bits_t)1) + (tc->lower_bit << (tc->def->bits - (bits_t)1));
+                if (tc->lower_timecode == tc->lower_bitstream) {
+                        tc->lower_valid_counter++;
+                } else {
+                        tc->lower_timecode = tc->lower_bitstream;
+                        tc->lower_valid_counter = 0;
+                }
+        }
+
+        if (tc->upper_valid_counter > tc->lower_valid_counter + VALID_BITS2_TRAKTOR_MK2) {
+            tc->bitstream = tc->upper_bitstream;
+            tc->timecode = tc->upper_timecode;
+        } else if (tc->lower_valid_counter > tc->upper_valid_counter + VALID_BITS2_TRAKTOR_MK2) {
+            tc->bitstream = tc->lower_bitstream;
+            tc->timecode = tc->lower_timecode;
+        }
+
+            /* printf("upper_valid_counter = %d, lower_valid_counter = %d\n", tc->upper_valid_counter, tc->lower_valid_counter); */
+    } else {
+
+        bits_t mask = (((bits_t)1 << tc->def->bits) - (bits_t)1);
+
+        if (tc->reading_type == UPPER_READING) {
+                tc->upper_timecode = rev(tc->upper_timecode, tc->def);
+                tc->upper_bitstream = ((tc->upper_bitstream << (bits_t)1) & mask) + tc->upper_bit;
+                if (tc->upper_timecode == tc->upper_bitstream) {
+                        tc->upper_valid_counter++;
+                } else {
+                        tc->upper_timecode = tc->upper_bitstream;
+                        tc->upper_valid_counter = 0;
+                }
+        } else {
+                tc->lower_timecode = rev(tc->lower_timecode, tc->def);
+                tc->lower_bitstream = ((tc->lower_bitstream << (bits_t)1) & mask) + tc->lower_bit;
+                if (tc->lower_timecode == tc->lower_bitstream) {
+                        tc->lower_valid_counter++;
+                } else {
+                        tc->lower_timecode = tc->lower_bitstream;
+                        tc->lower_valid_counter = 0;
+                }
+        }
+
+        if (tc->upper_valid_counter > tc->lower_valid_counter + VALID_BITS2_TRAKTOR_MK2) {
+            tc->bitstream = tc->upper_bitstream;
+            tc->timecode = tc->upper_timecode;
+        } else if (tc->lower_valid_counter > tc->upper_valid_counter + VALID_BITS2_TRAKTOR_MK2) {
+            tc->bitstream = tc->lower_bitstream;
+            tc->timecode = tc->lower_timecode;
+        }
+
+        /* printf("upper_valid_counter = %d, lower_valid_counter = %d\n", tc->upper_valid_counter, tc->lower_valid_counter); */
+
+    }
+
+    if (tc->timecode == tc->bitstream) {
+        tc->valid_counter++;
+    } else {
+        tc->timecode = tc->bitstream;
+        tc->valid_counter = 0;
+    }
+    /* Take note of the last time we read a valid timecode */
+
+    tc->timecode_ticker = 0;
+
+    signed int m = abs(primary->deriv / 2 - tc->primary.zero / 2);
+    tc->ref_level -= tc->ref_level / REF_PEAKS_AVG;
+    tc->ref_level += m / REF_PEAKS_AVG;
+
+
+    /* Inspect demodulation quality */
+    /* printf("upper_valid_counter: %d, lower_valid_counter %d, upper_valid_counter2: %d, lower_valid_counter2 %d, forwards: %b\n", */
+	   /* tc->upper_valid_counter, */
+	   /* tc->lower_valid_counter, */
+	   /* tc->upper_valid_counter2, */
+	   /* tc->lower_valid_counter2, */
+           /* tc->forwards); */
+}
+
 
 /*
  * Extract the bitstream from the sample value
@@ -495,8 +818,21 @@ static void process_bitstream(struct timecoder *tc, signed int m)
 static void process_sample(struct timecoder *tc,
 			   signed int primary, signed int secondary)
 {
-    detect_zero_crossing(&tc->primary, primary, tc->zero_alpha, tc->threshold);
-    detect_zero_crossing(&tc->secondary, secondary, tc->zero_alpha, tc->threshold);
+    double alpha = 0.3;
+
+    if (tc->def->flags & OFFSET_MODULATION) {
+        tc->primary.ema = ema(primary, &tc->primary.ema_old, alpha);
+        tc->secondary.ema = ema(secondary, &tc->secondary.ema_old, alpha);
+        tc->primary.deriv = discrete_derivative(tc->primary.ema, &tc->primary.deriv_old);
+        tc->secondary.deriv = discrete_derivative(tc->secondary.ema, &tc->secondary.deriv_old);
+        delayline_push(&tc->primary.delayline_deriv, tc->primary.deriv);
+        delayline_push(&tc->secondary.delayline_deriv, tc->secondary.deriv);
+        detect_zero_crossing(&tc->primary, tc->primary.deriv, tc->zero_alpha, tc->threshold);
+        detect_zero_crossing(&tc->secondary, tc->secondary.deriv, tc->zero_alpha, tc->threshold);
+    } else {
+        detect_zero_crossing(&tc->primary, primary, tc->zero_alpha, tc->threshold);
+        detect_zero_crossing(&tc->secondary, secondary, tc->zero_alpha, tc->threshold);
+    }
 
     /* If an axis has been crossed, use the direction of the crossing
      * to work out the direction of the vinyl */
@@ -527,6 +863,7 @@ static void process_sample(struct timecoder *tc,
     else {
 	double dx;
 
+	/* dx = emaf(1.0 / tc->def->resolution / 4, &pitch_old, 0.99); */
 	dx = 1.0 / tc->def->resolution / 4;
 	if (!tc->forwards)
 	    dx = -dx;
@@ -536,17 +873,26 @@ static void process_sample(struct timecoder *tc,
     /* If we have crossed the primary channel in the right polarity,
      * it's time to read off a timecode 0 or 1 value */
 
-    if (tc->secondary.swapped &&
-       tc->primary.positive == ((tc->def->flags & SWITCH_POLARITY) == 0))
-    {
-        signed int m;
+	if (tc->def->flags & OFFSET_MODULATION) {
+		if (tc->primary.swapped) {
+			signed int reading = *delayline_at_index(&tc->primary.delayline, FILTER_DELAY);
+			process_mk2_bitstream(tc, reading);
+		} else if (tc->secondary.swapped) {
+			signed int reading = *delayline_at_index(&tc->secondary.delayline, FILTER_DELAY);
+			process_mk2_bitstream(tc, reading);
+                }
+	} else {
+		if (tc->secondary.swapped &&
+		    tc->primary.positive == ((tc->def->flags & SWITCH_POLARITY) == 0)) {
+			signed int m;
 
-        /* scale to avoid clipping */
-        m = abs(primary / 2 - tc->primary.zero / 2);
-	process_bitstream(tc, m);
-    }
+			/* scale to avoid clipping */
+			m = abs(primary / 2 - tc->primary.zero / 2);
+			process_bitstream(tc, m);
+		}
+	}
 
-    tc->timecode_ticker++;
+	tc->timecode_ticker++;
 }
 
 /*
@@ -590,7 +936,7 @@ void timecoder_cycle_definition(struct timecoder *tc)
 void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm)
 {
     while (npcm--) {
-	signed int left, right, primary, secondary;
+        signed int left, right, primary, secondary;
 
         left = pcm[0] << 16;
         right = pcm[1] << 16;
@@ -603,17 +949,28 @@ void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm)
             secondary = left;
         }
 
-	process_sample(tc, primary, secondary);
-        update_monitor(tc, left, right);
+        if (tc->def->flags & OFFSET_MODULATION) {
+            delayline_push(&tc->primary.delayline, primary);
+            delayline_push(&tc->secondary.delayline, secondary);
+        }
+
+        process_sample(tc, primary, secondary);
+
+        if (tc->def->flags & OFFSET_MODULATION) {
+            update_monitor(tc, tc->primary.deriv, tc->secondary.deriv);
+	} else {
+            update_monitor(tc, left, right);
+        }
+
 
         pcm += TIMECODER_CHANNELS;
     }
 }
 
 /*
- * Get the last-known position of the timecode
+ * Get the last known position of the timecode
  *
- * If now data is available or if too few bits have been error
+ * If no data is available or if too few bits have been error
  * checked, then this counts as invalid. The last known position is
  * given along with the time elapsed since the position stamp was
  * read.
@@ -626,16 +983,18 @@ signed int timecoder_get_position(struct timecoder *tc, double *when)
 {
     signed int r;
 
-    if (tc->valid_counter <= VALID_BITS)
-        return -1;
+    if (tc->def->flags & OFFSET_MODULATION) {
+        if (tc->valid_counter < VALID_BITS_TRAKTOR_MK2)
+            return -1;
+    } else {
+        if (tc->valid_counter <= VALID_BITS)
+                return -1;
+    }
 
     r = lut_lookup(&tc->def->lut, tc->bitstream);
-    if (r == -1)
-        return -1;
 
-    if (r >= 0) {
-        // normalize position to milliseconds, not timecode steps -- Owen
-        r = (double)r * (1000.0 / ((double)tc->def->resolution * tc->speed));
+    if (r == -1) {
+        return -1;
     }
 
     if (when)
