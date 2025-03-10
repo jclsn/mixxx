@@ -823,8 +823,8 @@ static void process_sample(struct timecoder *tc,
     if (tc->def->flags & OFFSET_MODULATION) {
         tc->primary.ema = ema(primary, &tc->primary.ema_old, alpha);
         tc->secondary.ema = ema(secondary, &tc->secondary.ema_old, alpha);
-        tc->primary.deriv = discrete_derivative(tc->primary.ema, &tc->primary.deriv_old);
-        tc->secondary.deriv = discrete_derivative(tc->secondary.ema, &tc->secondary.deriv_old);
+        tc->primary.deriv = 10 * discrete_derivative(tc->primary.ema, &tc->primary.deriv_old);
+        tc->secondary.deriv = 10 * discrete_derivative(tc->secondary.ema, &tc->secondary.deriv_old);
         delayline_push(&tc->primary.delayline_deriv, tc->primary.deriv);
         delayline_push(&tc->secondary.delayline_deriv, tc->secondary.deriv);
         detect_zero_crossing(&tc->primary, tc->primary.deriv, tc->zero_alpha, tc->threshold);
