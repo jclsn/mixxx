@@ -26,6 +26,11 @@
 #ifndef _MSC_VER
 #include <unistd.h>
 #endif
+#ifdef _WIN32
+#include <windows.h>
+#include <shlobj.h> // for SHGetFolderPath
+#pragma comment(lib, "shell32.lib")
+#endif
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -383,19 +388,30 @@ int set_path(char *path, char *subpath)
     if (!path || !subpath)
         return -1;
 
-    const char *confdir = "/.mixxx";
-    const char *home;
-    int size;
+    const char *confdir;
+    const char *home = NULL;
     int len;
 
-    home = getenv("HOME");
-    if (!home)
+#ifdef _WIN32
+    char appdata[MAX_PATH];
+    if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appdata) != S_OK) {
+        fprintf(stderr, "Error getting APPDATA folder\n");
         return -1;
+    }
+    confdir = "\\Mixxx";
+    home = appdata;
+#else
+    confdir = "/.mixxx";
+    home = getenv("HOME");
+    if (!home) {
+        fprintf(stderr, "HOME not set\n");
+        return -1;
+    }
+#endif
 
-    len = strlen(home) + strlen(confdir) + strlen(subpath);
-    size = snprintf(path, len + 1, "%s%s%s", home, confdir, subpath);
-    if (size != len) {
-        perror("snprintf");
+    len = snprintf(path, 1024, "%s%s%s", home, confdir, subpath);
+    if (len < 0 || len >= 1024) {
+        fprintf(stderr, "Path too long\n");
         return -1;
     }
 
