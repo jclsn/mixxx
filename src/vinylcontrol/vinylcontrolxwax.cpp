@@ -7,7 +7,6 @@
 #include "control/controlproxy.h"
 #include "moc_vinylcontrolxwax.cpp"
 #include "util/defs.h"
-#include "util/math.h"
 #include "util/timer.h"
 #include "vinylcontrol/defs_vinylcontrol.h"
 #include "vinylcontrol/steadypitch.h"
