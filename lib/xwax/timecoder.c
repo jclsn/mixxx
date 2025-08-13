@@ -435,7 +435,7 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
     tc->forwards = 1;
     init_channel(tc->def, &tc->primary);
     init_channel(tc->def, &tc->secondary);
-    pitch_init(&tc->pitch, tc->dt);
+    pitch_init(&tc->pitch, tc->dt, 1e-1, 1e-4);
 
     tc->ref_level = INT_MAX;
     tc->bitstream = 0;

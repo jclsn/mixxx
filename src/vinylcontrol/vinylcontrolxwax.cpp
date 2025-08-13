@@ -614,14 +614,13 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
                 // For large changes in pitch (start/stop, usually), immediately
                 // update the display.
                 m_dDisplayPitch = averagePitch;
-            } else if (fabs(pitch_difference) > 0.005) {
-                // For medium changes in pitch, take 4 callback loops to
-                // converge on the correct amount.
-                m_dDisplayPitch += pitch_difference * .25;
-            } else {
+            }  else {
                 // For extremely small changes, converge very slowly.
                 m_dDisplayPitch += pitch_difference * .01;
             }
+
+            m_dDisplayPitch = dVinylPitch;
+
             // Don't show extremely high or low speeds in the UI.
             if (reportedPlayButton && !scratching->toBool() &&
                     m_dDisplayPitch < 1.9 && m_dDisplayPitch > 0.2) {
@@ -661,6 +660,7 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
             vinylStatus->set(VINYL_STATUS_OK);
         }
     }
+        m_dDisplayPitch = dVinylPitch;
 }
 
 // returns the delta between the current drift amount and the last reset value of the drift amount.
