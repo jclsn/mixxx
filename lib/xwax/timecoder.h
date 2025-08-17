@@ -32,7 +32,14 @@
 #define TIMECODER_CHANNELS 2
 
 #ifdef __cplusplus
+// Nichts, weil C++-<complex.h> kaputt ist für dich
+#else
+#include <complex.h>
+#endif
+
+#ifdef __cplusplus
 extern "C" {
+
 #endif // __cplusplus
 
 typedef unsigned int bits_t;
@@ -105,6 +112,9 @@ struct timecoder {
     bool use_legacy_pitch_filter;
     struct pitch pitch;
     struct pitch_kalman pitch_kalman;
+    _Complex double quadrant;
+    _Complex double last_quadrant;
+    bool backspin;
 
     /* Numerical timecode */
 

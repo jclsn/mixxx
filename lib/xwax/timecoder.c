@@ -440,6 +440,9 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
 
     tc->use_legacy_pitch_filter = pitch_estimator; /* Switch for pitch filter type */
 
+    tc->quadrant = 1.0 + 0.0i;
+    tc->last_quadrant = 1.0 + 0.0i;
+
     if (tc->use_legacy_pitch_filter) {
         pitch_init(&tc->pitch, tc->dt);
     } else {
@@ -450,6 +453,7 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
                 6e-4,  /* medium threshold  */
                 15e-4); /* scratch threshold  */
     }
+    tc->backspin = false;
 
     tc->ref_level = INT_MAX;
     tc->bitstream = 0;
@@ -630,6 +634,67 @@ static void process_bitstream(struct timecoder *tc, signed int m)
 }
 
 /*
+ * Compare the last quadrant we were in to the new one and return the
+ * correct displacement for the pitch filter model
+ */
+
+static double quantize_phase(struct timecoder *tc)
+{
+    /* Check for a displacement of three quadrants (rare)  */
+    if (tc->quadrant == tc->last_quadrant) {
+        debug("Skipped 3 quadrants\n");
+        if (!tc->forwards)
+            tc->backspin = true;
+        return 1.0 / tc->def->resolution;
+
+    /* Check for a displacement of two quadrants in the forwards direction  */
+    } else if (tc->forwards && carg(tc->quadrant * conj(tc->last_quadrant)) == -M_PI/2) {
+        debug("Skipped 2 quadrants\n");
+        tc->backspin = false;
+        return (3.0 / tc->def->resolution) / 4.0;
+
+    /* Check for a displacement of two quadrants in the reverse direction  */
+    } else if (!tc->forwards && carg(tc->quadrant * conj(tc->last_quadrant)) == M_PI/2) {
+        debug("Skipped 2 quadrants\n");
+        tc->backspin = true;
+        return (3.0 / tc->def->resolution) / 4.0;
+
+    /* Check for a displacement of one quadrant  */
+    } else if (fabs(carg(tc->quadrant * conj(tc->last_quadrant))) == M_PI) {
+        debug("Skipped 1 quadrant\n");
+        if (!tc->forwards)
+            tc->backspin = true;
+        return (1.0 / tc->def->resolution) / 2.0;
+
+    /* Default displacement of one quadrant */
+    } else {
+        tc->backspin = false;
+        return (1.0 / tc->def->resolution) / 4.0;
+    }
+}
+
+
+/*
+ * Track the quadrature of pitch counter in the complex plane
+ *
+ * Translates the zero crossings into the complex plane for a proper
+ * mathematica
+ */
+static void track_quadrature(struct timecoder *tc)
+{
+    tc->last_quadrant = tc->quadrant;
+
+    if (tc->primary.swapped && tc->primary.positive)
+        tc->quadrant = 1.0 + 0.0i;
+    else if (tc->primary.swapped && !tc->primary.positive)
+        tc->quadrant = -1.0 + 0.0i;
+    else if (tc->secondary.swapped && tc->secondary.positive)
+        tc->quadrant = 0.0 + 1.0i;
+    else if (tc->secondary.swapped && !tc->secondary.positive)
+        tc->quadrant = 0.0 - 1.0i;
+}
+
+/*
  * Process a single sample from the incoming audio
  *
  * The two input signals (primary and secondary) are in the full range
@@ -652,11 +717,13 @@ static void process_sample(struct timecoder *tc,
         detect_zero_crossing(&tc->secondary, secondary, tc->zero_alpha, tc->threshold);
     }
 
+
     /* If an axis has been crossed, use the direction of the crossing
      * to work out the direction of the vinyl */
 
     if (tc->primary.swapped || tc->secondary.swapped) {
         bool forwards;
+
 
         if (tc->primary.swapped) {
             forwards = (tc->primary.positive != tc->secondary.positive);
@@ -671,6 +738,8 @@ static void process_sample(struct timecoder *tc,
             tc->forwards = forwards;
             tc->valid_counter = 0;
         }
+
+        track_quadrature(tc);
     }
 
     /*
@@ -687,11 +756,12 @@ static void process_sample(struct timecoder *tc,
 	double dx;
 
         /*
-         * Assumption: We advance 1 / carrier_frequency / 4, which
-         * is exactly a quarter of the cycle
+         * Assumption: We usually advance by a quarter rotation,
+         * unless we skip zero crossings. In this case the new quadrature
+         * tracker calculates the correct displacement for the pitch filter.
          */
 
-	dx = 1.0 / tc->def->resolution / 4;
+	dx = quantize_phase(tc);
 	if (!tc->forwards)
 	    dx = -dx;
 
