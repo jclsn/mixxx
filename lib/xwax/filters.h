@@ -10,6 +10,14 @@ struct ema_filter {
 void ema_init(struct ema_filter *, const double alpha);
 int ema(struct ema_filter *, const int x);
 
+struct emaf_filter {
+    double alpha;
+    double y_old;
+};
+
+int emaf(struct emaf_filter *filter, const double x);
+void emaf_init(struct emaf_filter *, const double alpha);
+
 struct differentiator {
     int x_old;
 };

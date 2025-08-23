@@ -18,6 +18,8 @@
  */
 
 #include <assert.h>
+#include <delayline.h>
+#include <delayline.h>
 #include <limits.h>
 #include <pitch.h>
 #include <pitch_kalman.h>
@@ -388,6 +390,7 @@ static void init_mk2_channel(struct timecoder_channel *ch)
     ch->mk2.rms_deriv = 0;
 
     delayline_init(&ch->mk2.delayline);
+    delayline_init(&ch->mk2.delayline_deriv);
 
     ema_init(&ch->mk2.ema_filter, 3e-1);
     derivative_init(&ch->mk2.differentiator);
@@ -407,6 +410,8 @@ static void init_channel(struct timecode_def *def, struct timecoder_channel *ch)
 
     if (def->flags & TRAKTOR_MK2)
         init_mk2_channel(ch);
+
+    ema_init(&ch->freq_detector, 0.2);
 }
 
 /*
@@ -464,6 +469,8 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
 
     mk2_subcode_init(&tc->upper_bitstream);
     mk2_subcode_init(&tc->lower_bitstream);
+
+    emaf_init(&tc->freq_ema, 0.001);
 }
 
 /*
@@ -629,6 +636,32 @@ static void process_bitstream(struct timecoder *tc, signed int m)
 	  tc->valid_counter);
 }
 
+/**
+ * Compute instantaneous frequency from sine+cosine channels.
+ *
+ * @param cos_n   Current cosine sample (real part)
+ * @param sin_n   Current sine sample   (imag part)
+ * @param cos_nm1 Previous cosine sample
+ * @param sin_nm1 Previous sine sample
+ * @param fs      Sampling frequency (Hz)
+ * @return        Instantaneous frequency estimate (Hz)
+ */
+double instant_freq(double cos_n, double sin_n,
+                                   double cos_nm1, double sin_nm1,
+                                   double fs) {
+    // Complex ratio = (cos_n + i sin_n) / (cos_nm1 + i sin_nm1)
+    double denom = cos_nm1 * cos_nm1 + sin_nm1 * sin_nm1;
+    if (denom == 0.0) {
+        return 0.0; // avoid divide-by-zero
+    }
+
+    double real = (cos_n * cos_nm1 + sin_n * sin_nm1) / denom;
+    double imag = (sin_n * cos_nm1 - cos_n * sin_nm1) / denom;
+
+    double phase = atan2(imag, real);  // angle of ratio
+    return (fs / (2.0 * M_PI)) * phase;
+}
+
 /*
  * Process a single sample from the incoming audio
  *
@@ -647,10 +680,28 @@ static void process_sample(struct timecoder *tc,
         detect_zero_crossing(&tc->secondary, tc->secondary.mk2.deriv_scaled, tc->zero_alpha,
                 tc->threshold);
 
+        int smoothed_primary = ema(&tc->primary.freq_detector, tc->primary.mk2.deriv);
+        int smoothed_secondary = ema(&tc->secondary.freq_detector, tc->secondary.mk2.deriv);
+        delayline_push(&tc->primary.mk2.delayline_deriv, smoothed_primary);
+        delayline_push(&tc->secondary.mk2.delayline_deriv, smoothed_secondary);
     } else {
         detect_zero_crossing(&tc->primary, primary, tc->zero_alpha, tc->threshold);
         detect_zero_crossing(&tc->secondary, secondary, tc->zero_alpha, tc->threshold);
     }
+
+    int cos_n = *delayline_at(&tc->primary.mk2.delayline_deriv, 0);
+    int cos_nm1 = *delayline_at(&tc->primary.mk2.delayline_deriv, 1);
+    int cos_int = cos_n + (cos_nm1 - cos_n) * 0.5;
+
+    int sin_n = *delayline_at(&tc->secondary.mk2.delayline_deriv, 0);
+    int sin_nm1 = *delayline_at(&tc->secondary.mk2.delayline_deriv, 1);
+    int sin_int = sin_n + (sin_nm1 - sin_n) * 0.5;
+
+    double f = instant_freq(cos_n, sin_n, cos_int, sin_int, tc->sample_rate * 2);
+
+    f = emaf(&tc->freq_ema, f);
+    double pitch = f / tc->def->resolution;
+    printf("pitch = %+7f\n", pitch);
 
     /* If an axis has been crossed, use the direction of the crossing
      * to work out the direction of the vinyl */
@@ -701,6 +752,7 @@ static void process_sample(struct timecoder *tc,
             pitch_kalman_update(&tc->pitch_kalman, dx);
     }
 
+    tc->pitch_kalman.Xk[1] = pitch;
     /* If we have crossed the primary channel in the right polarity,
      * it's time to read off a timecode 0 or 1 value */
 

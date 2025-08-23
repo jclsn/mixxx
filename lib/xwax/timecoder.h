@@ -58,6 +58,7 @@ struct timecoder_channel_mk2 {
     signed int deriv, deriv_scaled; /* Derivative and its scaled version */
 
     struct delayline delayline; /* needed for the Traktor MK2 demodulation */
+    struct delayline delayline_deriv; /* needed for the Traktor MK2 demodulation */
     struct ema_filter ema_filter;
     struct differentiator differentiator;
     struct root_mean_square rms_filter, rms_deriv_filter;
@@ -70,6 +71,7 @@ struct timecoder_channel {
     unsigned int crossing_ticker; /* samples since we last crossed zero */
 
     struct timecoder_channel_mk2 mk2;
+    struct ema_filter freq_detector;;
 };
 
 struct mk2_subcode {
@@ -124,6 +126,8 @@ struct timecoder {
 
     struct mk2_subcode upper_bitstream, lower_bitstream;
     double gain_compensation; /* Scaling factor for the derivative */
+
+    struct emaf_filter freq_ema;
 };
 
 struct timecode_def* timecoder_find_definition(const char *name, const char *lut_dir_path);
