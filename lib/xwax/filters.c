@@ -13,8 +13,7 @@
 void ema_init(struct ema_filter *filter, const double alpha)
 {
     if (!filter) {
-        errno = EINVAL;
-        perror(__func__);
+        errno = EINVAL; perror(__func__);
         return;
     }
 
@@ -40,6 +39,43 @@ int ema(struct ema_filter *filter, const int x)
 
     return y;
 }
+
+
+/*
+ * Initializes the exponential moving average filter.
+ */
+
+void emaf_init(struct emaf_filter *filter, const double alpha)
+{
+    if (!filter) {
+        errno = EINVAL;
+        perror(__func__);
+        return;
+    }
+
+    filter->alpha = alpha;
+    filter->y_old = 0;
+}
+
+/*
+ * Computes an exponential moving average with the possibility to weight newly added
+ * values with a factor alpha.
+ */
+
+int emaf(struct emaf_filter *filter, const double x)
+{
+    if (!filter) {
+        errno = EINVAL;
+        perror(__func__);
+        return -EINVAL;
+    }
+
+    double y = filter->alpha * x + (1 - filter->alpha) * filter->y_old;
+    filter->y_old = y;
+
+    return y;
+}
+
 
 /*
  * Initializes the derivative filter.
@@ -105,4 +141,38 @@ int rms(struct root_mean_square *filter, const int x)
 
     /* Take square root at the end */
     return (int)sqrt(filter->squared_old);
+}
+
+/*
+ * Initializes the bandpass fillter
+ */
+
+
+void apbp_init(struct apbp_filter *filter, double Fc, double Fb, unsigned int sample_rate)
+{
+    double wb = 2 * Fb / (double) sample_rate;
+    double wc = 2 * Fc / (double) sample_rate;
+
+    filter->c = (tan(M_PI * wb / 2) - 1) / (tan(M_PI * wb / 2) + 1);
+    filter->d = -cos(M_PI * wc);
+    filter->xh[0] = 0;
+    filter->xh[1] = 0;
+}
+
+/*
+ * Applies a bandpass filter to the input signal x
+ *
+ * ωc is the normalized center frequency 0<ωc<1, i.e. 2*fc/fS
+ * ωb is the normalized bandwidth 0<ωb<1, i.e. 2*fb/fS
+ */
+
+int apbp(struct apbp_filter *filter, int x)
+{
+    int xh_new = x - filter->d * (1 - filter->c) * filter->xh[1] + filter->c * filter->xh[2];
+    int ap_y = -filter->c * xh_new + filter->d * (1 - filter->c) * filter->xh[1] + filter->xh[2];
+
+    filter->xh[1] = filter->xh[0];
+    filter->xh[0] = xh_new;
+
+    return 0.5 * (x - ap_y); // change to plus for bandreject
 }

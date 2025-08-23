@@ -18,6 +18,8 @@
  */
 
 #include <assert.h>
+#include <delayline.h>
+#include <delayline.h>
 #include <limits.h>
 #include <pitch.h>
 #include <pitch_kalman.h>
@@ -400,13 +402,17 @@ static void init_mk2_channel(struct timecoder_channel *ch)
  * Initialise filter values for one channel
  */
 
-static void init_channel(struct timecode_def *def, struct timecoder_channel *ch)
+static void init_channel(struct timecode_def *def, struct timecoder_channel *ch, unsigned int sample_rate)
 {
     ch->positive = false;
     ch->zero = 0;
 
     if (def->flags & TRAKTOR_MK2)
         init_mk2_channel(ch);
+
+    ema_init(&ch->freq_detector, 0.2);
+    delayline_init(&ch->delayline_deriv);
+    apbp_init(&ch->bandpass, 3000, 10000, sample_rate);
 }
 
 /*
@@ -435,8 +441,8 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
         tc->threshold >>= 5; /* approx -36dB */
 
     tc->forwards = 1;
-    init_channel(tc->def, &tc->primary);
-    init_channel(tc->def, &tc->secondary);
+    init_channel(tc->def, &tc->primary, sample_rate);
+    init_channel(tc->def, &tc->secondary, sample_rate);
 
     tc->use_legacy_pitch_filter = pitch_estimator; /* Switch for pitch filter type */
 
@@ -449,6 +455,11 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
                 KALMAN_COEFFS(1e-1, 1e-4), /* reactive mode */
                 6e-4,   /* medium threshold  */
                 15e-4); /* reactive threshold  */
+
+
+        double q  = 1e5;        /* try 1e4..1e6; higher -> more reactive */
+        double r  = 200.0*200.0;       /* if IF std ≈ 200 Hz, variance = 40000 */
+        fk_init(&tc->kalman_freq, tc->dt, 1.5 * tc->def->resolution, q, r);
     }
 
     tc->ref_level = INT_MAX;
@@ -464,6 +475,8 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
 
     mk2_subcode_init(&tc->upper_bitstream);
     mk2_subcode_init(&tc->lower_bitstream);
+
+    emaf_init(&tc->freq_ema, 0.001);
 }
 
 /*
@@ -629,6 +642,32 @@ static void process_bitstream(struct timecoder *tc, signed int m)
 	  tc->valid_counter);
 }
 
+/**
+ * Compute instantaneous frequency from sine+cosine channels.
+ *
+ * @param cos_n   Current cosine sample (real part)
+ * @param sin_n   Current sine sample   (imag part)
+ * @param cos_nm1 Previous cosine sample
+ * @param sin_nm1 Previous sine sample
+ * @param fs      Sampling frequency (Hz)
+ * @return        Instantaneous frequency estimate (Hz)
+ */
+double instant_freq(double cos_n, double sin_n,
+                                   double cos_nm1, double sin_nm1,
+                                   double fs) {
+    // Complex ratio = (cos_n + i sin_n) / (cos_nm1 + i sin_nm1)
+    double denom = cos_nm1 * cos_nm1 + sin_nm1 * sin_nm1;
+    if (denom == 0.0) {
+        return 0.0; // avoid divide-by-zero
+    }
+
+    double real = (cos_n * cos_nm1 + sin_n * sin_nm1) / denom;
+    double imag = (sin_n * cos_nm1 - cos_n * sin_nm1) / denom;
+
+    double phase = atan2(imag, real);  // angle of ratio
+    return (fs / (2.0 * M_PI)) * phase;
+}
+
 /*
  * Process a single sample from the incoming audio
  *
@@ -636,9 +675,13 @@ static void process_bitstream(struct timecoder *tc, signed int m)
  * of a signed int; ie. 32-bit signed.
  */
 
+double last_pitch = 0.0;
+
 static void process_sample(struct timecoder *tc,
 			   signed int primary, signed int secondary)
 {
+
+    int smoothed_primary, smoothed_secondary;
     if (tc->def->flags & TRAKTOR_MK2) {
         mk2_process_carrier(tc, primary, secondary);
 
@@ -647,10 +690,37 @@ static void process_sample(struct timecoder *tc,
         detect_zero_crossing(&tc->secondary, tc->secondary.mk2.deriv_scaled, tc->zero_alpha,
                 tc->threshold);
 
+        smoothed_primary = ema(&tc->primary.freq_detector, tc->primary.mk2.deriv);
+        smoothed_secondary = ema(&tc->secondary.freq_detector, tc->secondary.mk2.deriv);
     } else {
+        smoothed_primary = ema(&tc->primary.freq_detector, primary);
+        smoothed_secondary = ema(&tc->secondary.freq_detector, secondary);
+
         detect_zero_crossing(&tc->primary, primary, tc->zero_alpha, tc->threshold);
         detect_zero_crossing(&tc->secondary, secondary, tc->zero_alpha, tc->threshold);
     }
+
+    delayline_push(&tc->primary.delayline_deriv, smoothed_primary);
+    delayline_push(&tc->secondary.delayline_deriv, smoothed_secondary);
+    int cos_n = *delayline_at(&tc->primary.delayline_deriv, 0);
+    int cos_nm1 = *delayline_at(&tc->primary.delayline_deriv, 1);
+    int cos_int = cos_n + (cos_nm1 - cos_n) * 0.5;
+
+    int sin_n = *delayline_at(&tc->secondary.delayline_deriv, 0);
+    int sin_nm1 = *delayline_at(&tc->secondary.delayline_deriv, 1);
+    int sin_int = sin_n + (sin_nm1 - sin_n) * 0.5;
+
+    double f = instant_freq(cos_n, sin_n, cos_int, sin_int, tc->sample_rate * 2);
+
+    /* f = fk_update(&tc->kalman_freq, f); */
+    f = emaf(&tc->freq_ema, f);
+    double pitch = (trunc((f / tc->def->resolution) * 100)) / 100;
+    if (fabs(pitch) >  last_pitch) {
+        last_pitch = fabs(pitch);
+        printf("pitch = %+7f\n", pitch);
+    }
+    printf("pitch = %+7f\n", pitch);
+
 
     /* If an axis has been crossed, use the direction of the crossing
      * to work out the direction of the vinyl */
@@ -700,6 +770,8 @@ static void process_sample(struct timecoder *tc,
         else
             pitch_kalman_update(&tc->pitch_kalman, dx);
     }
+
+    tc->pitch_kalman.Xk[1] = pitch;
 
     /* If we have crossed the primary channel in the right polarity,
      * it's time to read off a timecode 0 or 1 value */

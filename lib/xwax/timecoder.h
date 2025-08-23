@@ -28,6 +28,7 @@
 #include "pitch.h"
 #include "pitch_kalman.h"
 #include "delayline.h"
+#include "pitch_kalman_freq.h"
 
 #define TIMECODER_CHANNELS 2
 
@@ -70,6 +71,9 @@ struct timecoder_channel {
     unsigned int crossing_ticker; /* samples since we last crossed zero */
 
     struct timecoder_channel_mk2 mk2;
+    struct ema_filter freq_detector;;
+    struct delayline delayline_deriv; /* needed for the Traktor MK2 demodulation */
+    struct apbp_filter bandpass;
 };
 
 struct mk2_subcode {
@@ -105,6 +109,7 @@ struct timecoder {
     bool use_legacy_pitch_filter;
     struct pitch pitch;
     struct pitch_kalman pitch_kalman;
+    struct kalman_freq kalman_freq;
 
     /* Numerical timecode */
 
@@ -124,6 +129,8 @@ struct timecoder {
 
     struct mk2_subcode upper_bitstream, lower_bitstream;
     double gain_compensation; /* Scaling factor for the derivative */
+
+    struct emaf_filter freq_ema;
 };
 
 struct timecode_def* timecoder_find_definition(const char *name, const char *lut_dir_path);
