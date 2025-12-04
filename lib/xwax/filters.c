@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "filters.h"
 
@@ -206,6 +207,59 @@ double butterworth(struct butterworth_filter* f, double xn)
 
     for(int i=1;i<5;i++){
         yn -= f->a[i]*f->y[i];
+    }
+
+    f->y[0] = yn;
+
+    return yn;
+}
+
+// Initialize filter
+struct iir_filter* iir_init(int ord, const double* b, const double* a)
+{
+    struct iir_filter* f = (struct iir_filter*)malloc(sizeof(struct iir_filter));
+
+    f->ord = ord;
+    f->b = (double*)malloc((ord + 1) * sizeof(double));
+    f->a = (double*)malloc((ord + 1) * sizeof(double));
+    f->x = (double*)calloc(ord + 1, sizeof(double));
+    f->y = (double*)calloc(ord + 1, sizeof(double));
+
+    for (int i = 0; i <= ord; i++) {
+        f->b[i] = b[i];
+        f->a[i] = a[i];
+    }
+    return f;
+}
+
+// Free filter memory
+void iir_free(struct iir_filter* f)
+{
+    free(f->b);
+    free(f->a);
+    free(f->x);
+    free(f->y);
+    free(f);
+}
+
+// Process one sample
+double iir_filter(struct iir_filter* f, double xn)
+{
+    // shift old samples
+    for (int i = f->ord; i > 0; i--) {
+        f->x[i] = f->x[i - 1];
+        f->y[i] = f->y[i - 1];
+    }
+
+    f->x[0] = xn;
+
+    double yn = 0.0;
+    for (int i = 0; i <= f->ord; i++) {
+        yn += f->b[i] * f->x[i];
+    }
+
+    for (int i = 1; i <= f->ord; i++) {
+        yn -= f->a[i] * f->y[i];
     }
 
     f->y[0] = yn;

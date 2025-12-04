@@ -110,6 +110,7 @@ struct timecoder {
     struct pitch pitch;
     struct pitch_kalman pitch_kalman;
     struct butterworth_filter pitch_butter;
+    struct iir_filter *pitch_iir;
     struct kalman_freq kalman_freq;
 
     /* Numerical timecode */
@@ -133,8 +134,8 @@ struct timecoder {
 
     struct emaf_filter freq_ema;
 };
-
 struct timecode_def* timecoder_find_definition(const char *name, const char *lut_dir_path);
+
 void timecoder_free_lookup(void);
 
 void timecoder_init(struct timecoder *tc, struct timecode_def *def,

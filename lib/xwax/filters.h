@@ -2,6 +2,8 @@
 
 #define FILTERS_H
 
+#define ORD(x) ((sizeof(x) / sizeof(*x)-1))
+
 struct ema_filter {
     double alpha;
     int y_old;
@@ -53,5 +55,17 @@ struct butterworth_filter {
 
 void butterworth_init(struct butterworth_filter* f, const double b[5], const double a[5]);
 double butterworth(struct butterworth_filter* f, double xn);
+
+struct iir_filter {
+    int ord;
+    double *b;
+    double *a;
+    double *x; // past inputs
+    double *y; // past outputs
+};
+
+struct iir_filter* iir_init(int ord, const double* b, const double* a);
+double iir_filter(struct iir_filter* f, double xn);
+void iir_free(struct iir_filter* f);
 
 #endif /* end of include guard FILTERS_H */
