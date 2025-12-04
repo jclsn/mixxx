@@ -456,6 +456,19 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
                 6e-4,   /* medium threshold  */
                 15e-4); /* reactive threshold  */
 
+        double b[5] = {2.0849116752452646e-15,
+                8.339646700981059e-15,
+                1.2509470051471588e-14,
+                8.339646700981059e-15,
+                2.0849116752452646e-15};
+
+        double a[5] = {1.0,
+                       -3.998883077915057,
+                        5.9966498574603815,
+                       -3.9966504809715833,
+                        0.9988837014262927};
+
+        butterworth_init(&tc->pitch_butter, a, b);
 
         double q  = 1e5;        /* try 1e4..1e6; higher -> more reactive */
         double r  = 200.0*200.0;       /* if IF std ≈ 200 Hz, variance = 40000 */
@@ -677,6 +690,7 @@ double instant_freq(double cos_n, double sin_n,
 
 double last_pitch = 0.0;
 
+
 static void process_sample(struct timecoder *tc,
 			   signed int primary, signed int secondary)
 {
@@ -712,8 +726,9 @@ static void process_sample(struct timecoder *tc,
 
     double f = instant_freq(cos_n, sin_n, cos_int, sin_int, tc->sample_rate * 2);
 
+    f = butterworth(&tc->pitch_butter, f);
     /* f = fk_update(&tc->kalman_freq, f); */
-    f = emaf(&tc->freq_ema, f);
+    /* f = emaf(&tc->freq_ema, f); */
     double pitch = (trunc((f / tc->def->resolution) * 100)) / 100;
     if (fabs(pitch) >  last_pitch) {
         last_pitch = fabs(pitch);

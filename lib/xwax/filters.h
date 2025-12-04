@@ -42,4 +42,16 @@ struct apbp_filter {
 void apbp_init(struct apbp_filter *filter, double Fc, double Fb, unsigned int sample_rate);
 int apbp(struct apbp_filter *filter, int x);
 
+
+// Example: 4th-order Butterworth
+struct butterworth_filter {
+    double b[5]; // numerator coefficients
+    double a[5]; // denominator coefficients
+    double x[5]; // past input samples
+    double y[5]; // past output samples
+};
+
+void butterworth_init(struct butterworth_filter* f, const double b[5], const double a[5]);
+double butterworth(struct butterworth_filter* f, double xn);
+
 #endif /* end of include guard FILTERS_H */

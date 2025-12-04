@@ -109,6 +109,7 @@ struct timecoder {
     bool use_legacy_pitch_filter;
     struct pitch pitch;
     struct pitch_kalman pitch_kalman;
+    struct butterworth_filter pitch_butter;
     struct kalman_freq kalman_freq;
 
     /* Numerical timecode */

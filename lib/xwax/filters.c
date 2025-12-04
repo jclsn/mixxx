@@ -176,3 +176,39 @@ int apbp(struct apbp_filter *filter, int x)
 
     return 0.5 * (x - ap_y); // change to plus for bandreject
 }
+
+// Initialize the butterworth filter
+void butterworth_init(struct butterworth_filter* f, const double b[5], const double a[5])
+{
+    for(int i=0;i<5;i++){
+        f->b[i] = b[i];
+        f->a[i] = a[i];
+        f->x[i] = 0.0;
+        f->y[i] = 0.0;
+    }
+}
+
+// Process one sample
+double butterworth(struct butterworth_filter* f, double xn)
+{
+    // shift old samples
+    for(int i=4;i>0;i--){
+        f->x[i] = f->x[i-1];
+        f->y[i] = f->y[i-1];
+    }
+
+    f->x[0] = xn;
+
+    double yn = 0.0;
+    for(int i=0;i<5;i++){
+        yn += f->b[i]*f->x[i];
+    }
+
+    for(int i=1;i<5;i++){
+        yn -= f->a[i]*f->y[i];
+    }
+
+    f->y[0] = yn;
+
+    return yn;
+}
