@@ -399,7 +399,7 @@ static void init_mk2_channel(struct timecoder_channel *ch)
 
     delayline_init(&ch->mk2.delayline);
 
-    ema_init(&ch->mk2.ema_filter, 3e-1);
+    ema_init(&ch->mk2.ema_filter, 7e-1);
     derivative_init(&ch->mk2.differentiator);
     rms_init(&ch->mk2.rms_filter, 1e-3);
     rms_init(&ch->mk2.rms_deriv_filter, 1e-3);
@@ -751,8 +751,8 @@ static void process_sample(struct timecoder *tc,
     /*
      * If any axis has been crossed, register movement using the pitch
      * counters. This occurs four time per cycle of the sinusoid.
-     */
 
+     */
     if (!tc->primary.swapped && !tc->secondary.swapped) {
         if (tc->use_legacy_pitch_filter)
             pitch_dt_observation(&tc->pitch, 0.0);
