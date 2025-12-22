@@ -408,10 +408,13 @@ static void init_channel(struct timecode_def *def, struct timecoder_channel *ch,
     ch->positive = false;
     ch->zero = 0;
 
-    if (def->flags & TRAKTOR_MK2)
+    if (def->flags & TRAKTOR_MK2) {
         init_mk2_channel(ch);
+        ema_init(&ch->freq_detector, 0.2);
+    } else {
+        ema_init(&ch->freq_detector, 0.5);
+    }
 
-    ema_init(&ch->freq_detector, 0.2);
     delayline_init(&ch->delayline_deriv);
     apbp_init(&ch->bandpass, 3000, 10000, sample_rate);
 }
@@ -441,6 +444,7 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
     if (phono)
         tc->threshold >>= 5; /* approx -36dB */
 
+        /* Fc=10 */
     tc->forwards = 1;
     init_channel(tc->def, &tc->primary, sample_rate);
     init_channel(tc->def, &tc->secondary, sample_rate);
@@ -449,12 +453,21 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
 
     if (tc->use_legacy_pitch_filter) {
         pitch_init(&tc->pitch, tc->dt);
-        pitch_kalman_init(&tc->pitch_kalman, tc->dt,
-                KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
-                KALMAN_COEFFS(1e-2, 1e-3), /* medium mode */
-                KALMAN_COEFFS(1e-1, 1e-4), /* reactive mode */
-                15,   /* medium threshold  */
-                20); /* reactive threshold  */
+
+        if (tc->def->flags & TRAKTOR_MK2)
+            pitch_kalman_init(&tc->pitch_kalman, tc->dt,
+                    KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
+                    KALMAN_COEFFS(1e-2, 1e-3), /* medium mode */
+                    KALMAN_COEFFS(1e-1, 1e-4), /* reactive mode */
+                    15,   /* medium threshold  */
+                    20); /* reactive threshold  */
+        else
+            pitch_kalman_init(&tc->pitch_kalman, tc->dt,
+                    KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
+                    KALMAN_COEFFS(1e-2, 1e-3), /* medium mode */
+                    KALMAN_COEFFS(1.0, 1e-8), /* reactive mode */
+                    15,   /* medium threshold  */
+                    20); /* reactive threshold  */
 
         /* Fc=3 */
     } else {
@@ -465,46 +478,6 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
                 6e-4,   /* medium threshold  */
                 15e-4); /* reactive threshold  */
 
-        /* Fc=3 */
-        /* double b[5] = {2.0849116752452646e-15, */
-        /*                8.339646700981059e-15, */
-        /*                1.2509470051471588e-14, */
-        /*                8.339646700981059e-15, */
-        /*                2.0849116752452646e-15}; */
-
-        /* double a[5] = {1.0, */
-        /*                -3.998883077915057, */
-        /*                5.9966498574603815, */
-        /*                -3.9966504809715833, */
-        /*                0.9988837014262927}; */
-
-        /* /1* Fc=25 *1/ */
-        /* double b[5] = {1.0013499729324947e-11, */
-        /*                4.005399891729979e-11, */
-        /*                6.008099837594968e-11, */
-        /*                4.005399891729979e-11, */
-        /*                1.0013499729324947e-11}; */
-
-        /* double a[5] = {1.0, */
-        /*                -3.990692318377839, */
-        /*                5.972120247145447, */
-        /*                -3.972163421297278, */
-        /*                0.9907354926898864}; */
-
-        /* /1* Fc=20 *1/ */
-        /* double b[5] = {4.105342221044312e-12, */
-        /*                1.6421368884177248e-11, */
-        /*                2.4632053326265872e-11, */
-        /*                1.6421368884177248e-11, */
-        /*                4.105342221044312e-12}; */
-
-        /* double a[5] = {1.0, */
-        /*                -3.9925538542225794, */
-        /*                5.977689272689384, */
-        /*                -3.9777169223433835, */
-        /*                0.9925815039422646}; */
-
-        /* Fc=10 */
         double b[5] = {2.570614602877119e-13,
                        1.0282458411508477e-12,
                        1.5423687617262716e-12,
@@ -516,71 +489,6 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
                        5.988837708838654,
                        -3.9888446303594574,
                        0.9962838481136069};
-
-        /* /1* Fc=5 *1/ */
-        /* double b[5] = {1.6081297196578634e-14, */
-        /*                6.432518878631454e-14, */
-        /*                9.64877831794718e-14, */
-        /*                6.432518878631454e-14, */
-        /*                1.6081297196578634e-14}; */
-
-        /* double a[5] = {1.0, */
-        /*                -3.9981384631529684, */
-        /*                5.994417121922968, */
-        /*                -3.994418853442694, */
-        /*                0.9981401946729519}; */
-
-        /* Fc=7.5 */
-        /* double b[5] = {8.137369004842055e-14, */
-        /*                3.254947601936822e-13, */
-        /*                4.882421402905233e-13, */
-        /*                3.254947601936822e-13, */
-        /*                8.137369004842055e-14}; */
-
-        /* double a[5] = {1.0, */
-        /*                -3.9972076948863, */
-        /*                5.991626982482493, */
-        /*                -3.991630877119564, */
-        /*                0.9972115895246731}; */
-
-        /* Fc=10 */
-        /* double b[4] = {3.6100670987635687e-10, 1.0830201296290705e-9, */
-        /*                1.0830201296290705e-9, 3.6100670987635687e-10}; */
-        /* double a[4] = {1.0, -2.9971504831000795, 2.994305024627357, -0.997154538639224}; */
-
-        /* Fc=10 */
-        /* double b[3] = {5.069733901910029e-7, */
-        /*                1.0139467803820057e-6, */
-        /*                5.069733901910029e-7}; */
-
-        /* double a[3] = {1.0, */
-        /*                -1.9979850877871999, */
-        /*                0.9979871156808268}; */
-
-        /* /1* Fc=8 *1/ */
-        /* double b[3] = {3.245283016641421e-7, */
-        /*                6.490566033282842e-7, */
-        /*                3.245283016641421e-7}; */
-
-        /* double a[3] = {1.0, */
-        /*                -1.9983880701003074, */
-        /*                0.9983893682134958}; */
-
-        /* /1* fc=10 *1/ */
-        /* double b[6] = {1.8304404291182607e-16, */
-        /*                9.152202145591304e-16, */
-        /*                1.8304404291182607e-15, */
-        /*                1.8304404291182607e-15, */
-        /*                9.152202145591304e-16, */
-        /*                1.8304404291182607e-16}; */
-
-        /* double a[6] = {1.0, */
-        /*                -4.9953893845282344, */
-        /*                9.981568165212995, */
-        /*                -9.972368173334214, */
-        /*                4.981589389155704, */
-        /*                -0.9953999965062434}; */
-
         tc->pitch_iir = iir_init(ORD(b), b, a);
 
         double q  = 1e5;        /* try 1e4..1e6; higher -> more reactive */
@@ -768,64 +676,6 @@ static void process_bitstream(struct timecoder *tc, signed int m)
 	  tc->valid_counter);
 }
 
-/**
- * Compute instantaneous frequency from sine+cosine channels.
- *
- * @param cos_n   Current cosine sample (real part)
- * @param sin_n   Current sine sample   (imag part)
- * @param cos_nm1 Previous cosine sample
- * @param sin_nm1 Previous sine sample
- * @param fs      Sampling frequency (Hz)
- * @return        Instantaneous frequency estimate (Hz)
- */
-double instant_freq(double cos_n, double sin_n,
-                                   double cos_nm1, double sin_nm1,
-                                   double fs) {
-    // Complex ratio = (cos_n + i sin_n) / (cos_nm1 + i sin_nm1)
-    double denom = cos_nm1 * cos_nm1 + sin_nm1 * sin_nm1;
-    if (denom == 0.0) {
-        return 0.0; // avoid divide-by-zero
-    }
-
-    double real = (cos_n * cos_nm1 + sin_n * sin_nm1) / denom;
-    double imag = (sin_n * cos_nm1 - cos_n * sin_nm1) / denom;
-
-    double phase = atan2(imag, real);  // angle of ratio
-    return (fs / (2.0 * M_PI)) * phase;
-}
-
-double instant_freq2(struct iir_filter *iir, double cos_n, double sin_n,
-                    double cos_nm1, double sin_nm1,
-                    double fs) {
-
-    // Compute the complex ratio via conjugate multiplication
-    double real = cos_n * cos_nm1 + sin_n * sin_nm1;
-    double imag = sin_n * cos_nm1 - cos_n * sin_nm1;
-
-    // Avoid division by very small amplitude (numerical stability)
-    double mag_sq = cos_nm1*cos_nm1 + sin_nm1*sin_nm1;
-    if (mag_sq < DBL_EPSILON) {
-        return 0.0; // previous sample too small
-    }
-    real /= mag_sq;
-    imag /= mag_sq;
-
-    // Compute phase difference
-    double dphi = atan2(imag, real);
-
-    // Optional: unwrap phase if needed
-    // static double last_phase = 0.0;
-    // double delta = dphi - last_phase;
-    // while(delta > M_PI) delta -= 2*M_PI;
-    // while(delta < -M_PI) delta += 2*M_PI;
-    // last_phase = last_phase + delta;
-    // dphi = delta;
-    dphi = iir_filter(iir, dphi);
-
-    // Convert to frequency in Hz
-    return (fs / (2.0 * M_PI)) * dphi;
-}
-
 double instant_phase_diff(double cos_n, double sin_n,
                           double cos_nm1, double sin_nm1)
 {
@@ -833,7 +683,15 @@ double instant_phase_diff(double cos_n, double sin_n,
     double real = cos_n * cos_nm1 + sin_n * sin_nm1;
     double imag = sin_n * cos_nm1 - cos_n * sin_nm1;
 
-    return atan2(imag, real);   // Δϕ in RADIANS
+    double dphi = atan2(imag, real);   // Δϕ in RADIANS
+
+    // unwra    // unwrapp
+    while(dphi > M_PI)
+        dphi -= 2 * M_PI;
+    while(dphi <  -M_PI)
+        dphi += 2 * M_PI;
+
+    return dphi;
 }
 
 /*
@@ -861,13 +719,20 @@ static void process_sample(struct timecoder *tc,
 
         smoothed_primary = ema(&tc->primary.freq_detector, tc->primary.mk2.deriv);
         smoothed_secondary = ema(&tc->secondary.freq_detector, tc->secondary.mk2.deriv);
+
+        delayline_push(&tc->primary.delayline_deriv, smoothed_primary);
+        delayline_push(&tc->secondary.delayline_deriv, smoothed_secondary);
+
     } else {
         detect_zero_crossing(&tc->primary, primary, tc->zero_alpha, tc->threshold);
         detect_zero_crossing(&tc->secondary, secondary, tc->zero_alpha, tc->threshold);
-    }
 
-    delayline_push(&tc->primary.delayline_deriv, smoothed_primary);
-    delayline_push(&tc->secondary.delayline_deriv, smoothed_secondary);
+        smoothed_primary = ema(&tc->primary.freq_detector, primary);
+        smoothed_secondary = ema(&tc->secondary.freq_detector, secondary);
+
+        delayline_push(&tc->primary.delayline_deriv, smoothed_primary);
+        delayline_push(&tc->secondary.delayline_deriv, smoothed_secondary);
+    }
 
     int cos_n = *delayline_at(&tc->primary.delayline_deriv, 0);
     int cos_nm1 = *delayline_at(&tc->primary.delayline_deriv, 1);
@@ -878,15 +743,15 @@ static void process_sample(struct timecoder *tc,
     double dphi = instant_phase_diff(cos_n, sin_n, cos_nm1, sin_nm1);
     double dphitc = 2 * M_PI * drift;
 
-    if (timecoder_get_position(tc, NULL) != -1 && fabs(dphitc) < fabs(dphi)) {
-        dphi = dphi + 0.1 * dphitc;
-        /* printf("dphi = %+3f, dphitc = %+3f\n", dphi, dphitc); */
-    }
+    /* if (timecoder_get_position(tc, NULL) != -1 && fabs(dphitc) < fabs(dphi)) { */
+    /*     dphi = dphi + 0.1 * dphitc; */
+    /*     /1* printf("dphi = %+3f, dphitc = %+3f\n", dphi, dphitc); *1/ */
+    /* } */
 
     /* double dphi_filtered = iir_filter(tc->pitch_iir, dphi); */
     pitch_kalman_update(&tc->pitch_kalman, dphi);
     double dphi_filtered = tc->pitch_kalman.Xk[1];
-    double f = dphi_filtered / (2.0*M_PI);
+    double f = dphi_filtered / (2.0 * M_PI);
 
     /* double f = instant_freq(cos_n, sin_n, cos_nm1, sin_nm1, 48000); */
     /* f = iir_filter(tc->pitch_iir, f); */
@@ -897,13 +762,8 @@ static void process_sample(struct timecoder *tc,
     /* f = fk_update(&tc->kalman_freq, f); */
     /* f = emaf(&tc->freq_ema, f); */
     double pitch = (f / tc->def->resolution);
-    /* double pitch = (trunc((f / tc->def->resolution) * 10000)) / 10000; */
-    /* if (fabs(pitch) >  last_pitch) { */
-    /*     last_pitch = fabs(pitch); */
-    /*     printf("pitch = %+7f\n", pitch); */
-    /* } */
-    /* printf("pitch = %+7f\n", pitch); */
-    /* printf("pitch = %+3f, freq = %+7f\n", pitch, f); */
+
+    printf("pitch = %+3f, freq = %+7f\n", pitch, f);
 
 
     /* If an axis has been crossed, use the direction of the crossing
@@ -927,33 +787,6 @@ static void process_sample(struct timecoder *tc,
         }
     }
 
-    /*
-     * If any axis has been crossed, register movement using the pitch
-     * counters. This occurs four time per cycle of the sinusoid.
-     */
-
-    if (!tc->primary.swapped && !tc->secondary.swapped)
-        if (tc->use_legacy_pitch_filter)
-            pitch_dt_observation(&tc->pitch, 0.0);
-        else
-            pitch_kalman_update(&tc->pitch_kalman, 0.0);
-    else {
-        double dx;
-
-        /*
-         * Assumption: We advance 1 / carrier_frequency / 4, which
-         * is exactly a quarter of the cycle
-         */
-
-        dx = 1.0 / tc->def->resolution / 4;
-        if (!tc->forwards)
-            dx = -dx;
-
-        if (tc->use_legacy_pitch_filter)
-            pitch_dt_observation(&tc->pitch, dx);
-        else
-            pitch_kalman_update(&tc->pitch_kalman, dx);
-    }
 
     /* tc->pitch_kalman.Xk[1] = pitch; */
     tc->pitch.v = pitch;
