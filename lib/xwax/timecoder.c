@@ -710,8 +710,10 @@ static void track_quadrature_phase(struct timecoder *tc, bool direction_changed)
  */
 
 static void process_sample(struct timecoder *tc,
-			   signed int primary, signed int secondary)
+			   signed int primary, signed int secondary, double drift, bool *correct)
 {
+    double dx_drift = 0.0;
+
     if (tc->def->flags & TRAKTOR_MK2) {
         mk2_process_carrier(tc, primary, secondary);
 
@@ -751,15 +753,37 @@ static void process_sample(struct timecoder *tc,
     /*
      * If any axis has been crossed, register movement using the pitch
      * counters. This occurs four time per cycle of the sinusoid.
-
      */
-    if (!tc->primary.swapped && !tc->secondary.swapped) {
-        if (tc->use_legacy_pitch_filter)
-            pitch_dt_observation(&tc->pitch, 0.0);
+
+    if (*correct) {
+        if (tc->def->flags & TRAKTOR_MK2)
+            dx_drift = drift / 100.0;
         else
-            pitch_kalman_update(&tc->pitch_kalman, 0.0);
+            dx_drift = drift / 300.0;
+
+        double cap = 2.0 * quantize_phase(tc);
+        if (fabs(dx_drift) > cap)
+            if (dx_drift < 0.0)
+                dx_drift = -cap;
+            else if (dx_drift > 0.0)
+                dx_drift = cap;
+
+        printf("NUDGING BY: %+3f\n", dx_drift);
+        *correct = false;
+    }
+
+    double dx;
+
+    if (!tc->primary.swapped && !tc->secondary.swapped) {
+        dx = 0.0 + dx_drift;
+        if (!tc->forwards)
+            dx = -dx;
+
+        if (tc->use_legacy_pitch_filter)
+            pitch_dt_observation(&tc->pitch, dx);
+        else
+            pitch_kalman_update(&tc->pitch_kalman, dx);
     } else {
-        double dx;
 
         /*
          * Assumption: We usually advance by a quarter rotation,
@@ -768,8 +792,13 @@ static void process_sample(struct timecoder *tc,
          */
 
         dx = quantize_phase(tc);
+
+        dx += dx_drift;
+
         if (!tc->forwards)
             dx = -dx;
+
+        /* printf("dx = %+3f, drift_dx = %+3f\n", dx, dx_drift); */
 
         if (tc->use_legacy_pitch_filter)
             pitch_dt_observation(&tc->pitch, dx);
@@ -783,7 +812,7 @@ static void process_sample(struct timecoder *tc,
     if (tc->def->flags & TRAKTOR_MK2) {
         if (tc->secondary.swapped)
         {
-            int reading = *delayline_at(&tc->secondary.mk2.delayline, 3);
+            int reading = *delayline_at(&tc->secondary.mk2.delayline, 1);
             mk2_process_timecode(tc, reading);
         }
     } else {
@@ -839,7 +868,7 @@ void timecoder_cycle_definition(struct timecoder *tc)
  * PCM data is in the full range of signed short; ie. 16-bit signed.
  */
 
-void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm)
+void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm, double drift, bool *correct)
 {
     while (npcm--) {
 	signed int left, right, primary, secondary;
@@ -856,7 +885,7 @@ void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm)
         }
 
         if (tc->def->flags & TRAKTOR_MK2) {
-            process_sample(tc, primary, secondary);
+            process_sample(tc, primary, secondary, drift, correct);
 
             /* 
              * Display the derivative in the monitor. Since the signal is not
@@ -868,7 +897,7 @@ void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm)
             update_monitor(tc, tc->primary.mk2.deriv_scaled * 2,
                     tc->secondary.mk2.deriv_scaled * 2);
         } else {
-            process_sample(tc, primary, secondary);
+            process_sample(tc, primary, secondary, drift, correct);
             update_monitor(tc, left, right);
         }
 

@@ -127,6 +127,7 @@ class VinylControlXwax : public VinylControl {
     double m_dDriftAmt;
     double m_initialRelativeDriftAmt;
     double m_deltaRelativeDriftAmount;
+    bool m_bCorrectNextSubmission;
 
     // Records the time of the last UI update. Used to prevent hammering the GUI
     // with updates.
