@@ -265,7 +265,11 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
 
     // Submit the samples to the xwax timecode processor. The size argument is
     // in stereo frames.
-    timecoder_submit(&timecoder, m_pWorkBuffer.data(), nFrames);
+    if (m_iVCMode == MIXXX_VCMODE_ABSOLUTE) {
+        timecoder_submit(&timecoder, m_pWorkBuffer.data(), nFrames, m_dDriftAmt);
+    } else {
+        timecoder_submit(&timecoder, m_pWorkBuffer.data(), nFrames, m_deltaRelativeDriftAmount);
+    }
 
     bool bHaveSignal = fabs(pSamples[0]) + fabs(pSamples[1]) > kMinSignal;
     //qDebug() << "signal?" << bHaveSignal;
@@ -439,7 +443,7 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
                 m_deltaRelativeDriftAmount = calcDeltaRelativeDriftAmount(m_deltaFilePos);
             }
 
-            //qDebug() << "drift" << m_dDriftAmt;
+            qDebug() << "drift" << m_dDriftAmt << ", relative drift" << m_deltaRelativeDriftAmount;
 
             if (m_bForceResync) {
                 //if forceresync was set but we're no longer absolute,
