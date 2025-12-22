@@ -847,7 +847,7 @@ double last_pitch = 0.0;
 
 
 static void process_sample(struct timecoder *tc,
-			   signed int primary, signed int secondary)
+			   signed int primary, signed int secondary, double drift)
 {
 
     int smoothed_primary, smoothed_secondary;
@@ -862,15 +862,13 @@ static void process_sample(struct timecoder *tc,
         smoothed_primary = ema(&tc->primary.freq_detector, tc->primary.mk2.deriv);
         smoothed_secondary = ema(&tc->secondary.freq_detector, tc->secondary.mk2.deriv);
     } else {
-        smoothed_primary = ema(&tc->primary.freq_detector, primary);
-        smoothed_secondary = ema(&tc->secondary.freq_detector, secondary);
-
         detect_zero_crossing(&tc->primary, primary, tc->zero_alpha, tc->threshold);
         detect_zero_crossing(&tc->secondary, secondary, tc->zero_alpha, tc->threshold);
     }
 
     delayline_push(&tc->primary.delayline_deriv, smoothed_primary);
     delayline_push(&tc->secondary.delayline_deriv, smoothed_secondary);
+
     int cos_n = *delayline_at(&tc->primary.delayline_deriv, 0);
     int cos_nm1 = *delayline_at(&tc->primary.delayline_deriv, 1);
 
@@ -878,6 +876,13 @@ static void process_sample(struct timecoder *tc,
     int sin_nm1 = *delayline_at(&tc->secondary.delayline_deriv, 1);
 
     double dphi = instant_phase_diff(cos_n, sin_n, cos_nm1, sin_nm1);
+    double dphitc = 2 * M_PI * drift;
+
+    if (timecoder_get_position(tc, NULL) != -1 && fabs(dphitc) < fabs(dphi)) {
+        dphi = dphi + 0.1 * dphitc;
+        /* printf("dphi = %+3f, dphitc = %+3f\n", dphi, dphitc); */
+    }
+
     /* double dphi_filtered = iir_filter(tc->pitch_iir, dphi); */
     pitch_kalman_update(&tc->pitch_kalman, dphi);
     double dphi_filtered = tc->pitch_kalman.Xk[1];
@@ -898,7 +903,7 @@ static void process_sample(struct timecoder *tc,
     /*     printf("pitch = %+7f\n", pitch); */
     /* } */
     /* printf("pitch = %+7f\n", pitch); */
-    printf("pitch = %+3f, freq = %+7f\n", pitch, f);
+    /* printf("pitch = %+3f, freq = %+7f\n", pitch, f); */
 
 
     /* If an axis has been crossed, use the direction of the crossing
@@ -1015,7 +1020,7 @@ void timecoder_cycle_definition(struct timecoder *tc)
  * PCM data is in the full range of signed short; ie. 16-bit signed.
  */
 
-void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm)
+void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm, double drift)
 {
     while (npcm--) {
 	signed int left, right, primary, secondary;
@@ -1032,7 +1037,7 @@ void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm)
         }
 
         if (tc->def->flags & TRAKTOR_MK2) {
-            process_sample(tc, primary, secondary);
+            process_sample(tc, primary, secondary, drift);
 
             /* 
              * Display the derivative in the monitor. Since the signal is not
@@ -1044,7 +1049,7 @@ void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm)
             update_monitor(tc, tc->primary.mk2.deriv_scaled * 2,
                     tc->secondary.mk2.deriv_scaled * 2);
         } else {
-            process_sample(tc, primary, secondary);
+            process_sample(tc, primary, secondary, drift);
             update_monitor(tc, left, right);
         }
 
