@@ -392,7 +392,7 @@ static void init_mk2_channel(struct timecoder_channel *ch)
 
     delayline_init(&ch->mk2.delayline);
 
-    ema_init(&ch->mk2.ema_filter, 3e-1);
+    ema_init(&ch->mk2.ema_filter, 7e-1);
     derivative_init(&ch->mk2.differentiator);
     rms_init(&ch->mk2.rms_filter, 1e-3);
     rms_init(&ch->mk2.rms_deriv_filter, 1e-3);
@@ -451,10 +451,10 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
         pitch_init(&tc->pitch, tc->dt);
         pitch_kalman_init(&tc->pitch_kalman, tc->dt,
                 KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
-                KALMAN_COEFFS(1e-4, 1e-1), /* medium mode */
+                KALMAN_COEFFS(1e-2, 1e-3), /* medium mode */
                 KALMAN_COEFFS(1e-1, 1e-4), /* reactive mode */
-                10-4,   /* medium threshold  */
-                15-4); /* reactive threshold  */
+                15,   /* medium threshold  */
+                20); /* reactive threshold  */
 
         /* Fc=3 */
     } else {
