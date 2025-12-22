@@ -710,7 +710,7 @@ static void track_quadrature_phase(struct timecoder *tc, bool direction_changed)
  */
 
 static void process_sample(struct timecoder *tc,
-			   signed int primary, signed int secondary, double drift)
+			   signed int primary, signed int secondary, double drift, bool *correct)
 {
     double dx_drift = 0.0;
 
@@ -755,16 +755,20 @@ static void process_sample(struct timecoder *tc,
      * counters. This occurs four time per cycle of the sinusoid.
      */
 
-    /* if (tc->def->flags & TRAKTOR_MK2) */
-        dx_drift = (1.0 / tc->def->resolution) * drift;
-    /* else */
-    /*     dx_drift = (1.0 / tc->def->resolution) * (drift / 2.5); */
+    if (*correct) {
+        printf("!!! CORRECTING !!!\n");
+        if (tc->def->flags & TRAKTOR_MK2)
+            dx_drift = (1.0 / tc->def->resolution) * (33 * drift);
+        else
+            dx_drift = (1.0 / tc->def->resolution) * (5 * drift);
+
+        *correct = false;
+    }
 
     if (!tc->primary.swapped && !tc->secondary.swapped) {
         double zero_dx = 0.0;
 
-        /* if (timecoder_get_position(tc, NULL) != -1 && fabs(dx_drift) < fabs(1.0/tc->def->resolution)) */
-        /*     zero_dx = zero_dx + dx_drift; */
+        zero_dx = zero_dx + dx_drift;
 
         if (tc->use_legacy_pitch_filter)
             pitch_dt_observation(&tc->pitch, zero_dx);
@@ -780,11 +784,11 @@ static void process_sample(struct timecoder *tc,
          */
 
         dx = quantize_phase(tc);
+
         if (!tc->forwards)
             dx = -dx;
 
-        if (timecoder_get_position(tc, NULL) != -1 && fabs(dx_drift) < fabs(dx))
-            dx = dx + dx_drift;
+        dx = dx + dx_drift;
 
         /* printf("dx = %+3f, drift_dx = %+3f\n", dx, dx_drift); */
 
@@ -800,7 +804,7 @@ static void process_sample(struct timecoder *tc,
     if (tc->def->flags & TRAKTOR_MK2) {
         if (tc->secondary.swapped)
         {
-            int reading = *delayline_at(&tc->secondary.mk2.delayline, 3);
+            int reading = *delayline_at(&tc->secondary.mk2.delayline, 1);
             mk2_process_timecode(tc, reading);
         }
     } else {
@@ -856,7 +860,7 @@ void timecoder_cycle_definition(struct timecoder *tc)
  * PCM data is in the full range of signed short; ie. 16-bit signed.
  */
 
-void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm, double drift)
+void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm, double drift, bool *correct)
 {
     while (npcm--) {
 	signed int left, right, primary, secondary;
@@ -873,7 +877,7 @@ void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm, doub
         }
 
         if (tc->def->flags & TRAKTOR_MK2) {
-            process_sample(tc, primary, secondary, drift);
+            process_sample(tc, primary, secondary, drift, correct);
 
             /* 
              * Display the derivative in the monitor. Since the signal is not
@@ -885,7 +889,7 @@ void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm, doub
             update_monitor(tc, tc->primary.mk2.deriv_scaled * 2,
                     tc->secondary.mk2.deriv_scaled * 2);
         } else {
-            process_sample(tc, primary, secondary, drift);
+            process_sample(tc, primary, secondary, drift, correct);
             update_monitor(tc, left, right);
         }
 

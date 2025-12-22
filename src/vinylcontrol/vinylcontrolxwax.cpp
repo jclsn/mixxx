@@ -59,6 +59,7 @@ VinylControlXwax::VinylControlXwax(UserSettingsPointer pConfig, const QString& g
           m_dDriftAmt(0.0),
           m_initialRelativeDriftAmt(0.0),
           m_deltaRelativeDriftAmount(0.0),
+          m_bCorrectNextSubmission(false),
           m_dUiUpdateTime(-1.0) {
     // TODO(rryan): Should probably live in VinylControlManager since it's not
     // specific to a VC deck.
@@ -266,9 +267,9 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
     // Submit the samples to the xwax timecode processor. The size argument is
     // in stereo frames.
     if (m_iVCMode == MIXXX_VCMODE_ABSOLUTE) {
-        timecoder_submit(&timecoder, m_pWorkBuffer.data(), nFrames, m_dDriftAmt);
+        timecoder_submit(&timecoder, m_pWorkBuffer.data(), nFrames, m_dDriftAmt, &m_bCorrectNextSubmission);
     } else {
-        timecoder_submit(&timecoder, m_pWorkBuffer.data(), nFrames, m_deltaRelativeDriftAmount);
+        timecoder_submit(&timecoder, m_pWorkBuffer.data(), nFrames, m_deltaRelativeDriftAmount, &m_bCorrectNextSubmission);
     }
 
     bool bHaveSignal = fabs(pSamples[0]) + fabs(pSamples[1]) > kMinSignal;
@@ -429,6 +430,7 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
         if (m_iPosition != -1) {
             //POSITION: YES  PITCH: YES
 
+            m_bCorrectNextSubmission = true;
             bool reversed = static_cast<bool>(reverseButton->get());
             if (!reversed && m_bWasReversed) {
                 resetSteadyPitch(dVinylPitch, m_dVinylPosition);
@@ -441,9 +443,11 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
             if (m_iVCMode == MIXXX_VCMODE_RELATIVE) {
                 m_deltaFilePos = filePosition - m_dOldFilePos;
                 m_deltaRelativeDriftAmount = calcDeltaRelativeDriftAmount(m_deltaFilePos);
+
             }
 
-            qDebug() << "drift" << m_dDriftAmt << ", relative drift" << m_deltaRelativeDriftAmount;
+            qDebug().noquote() << "drift" << QString::asprintf("%+3f", m_dDriftAmt)
+                     << ", relative drift" << QString::asprintf("%+3f", m_deltaRelativeDriftAmount);
 
             if (m_bForceResync) {
                 //if forceresync was set but we're no longer absolute,
@@ -604,6 +608,7 @@ double VinylControlXwax::calcDeltaRelativeDriftAmount(double deltaFilePos) {
             m_passthroughEnabled.toBool() || reverseButton->toBool() ||
             m_scratchPositionEnabled.toBool()) {
         m_initialRelativeDriftAmt = m_dDriftAmt;
+        qDebug() << "NEEDLE DROPPED!!!";
     }
 
     return m_dDriftAmt - m_initialRelativeDriftAmt;
