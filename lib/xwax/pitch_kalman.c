@@ -61,9 +61,9 @@ void pitch_kalman_init(struct pitch_kalman *p, double dt, struct kalman_coeffs s
      * NOTE: P[v][x] is unused and therefore not initialized
      */
 
-    p->P[x][x] = 1e6;
+    p->P[x][x] = 1e-6;
     p->P[x][v] = 0.0;
-    p->P[v][v] = 1e6;
+    p->P[v][v] = 1e-6;
 
     /* Fixed thresholds for the mode switches */
 
@@ -163,6 +163,13 @@ void pitch_kalman_update(struct pitch_kalman* p, double dx)
     const double y = dx - X_pred[x];
 
     /*
+     * Innovation covariance: S = H * P_pred * H^T + R
+     * With H = [1 0], this reduces to: S = P_pred[x][x] + R
+     */
+
+    const double S = P_pred[x][x] + p->coeffs->R;
+
+    /*
      * Toggle mode switches for stable playback and scratching. When the
      * innovation quantity hits a certain treshold the filter sensitivity
      * is tuned.
@@ -181,35 +188,27 @@ void pitch_kalman_update(struct pitch_kalman* p, double dx)
      *       smooth the innovation before.
      */
 
-    const double y_abs = fabs(y);
+    /* Ensure reactivity and quick decay after standstill */
 
-    kalman_debug("innovation: %+f, ", y);
-    if (y_abs > p->scratch_threshold) {
+    if (fabs(p->Xk[v]) < 5e-1) {
+        kalman_tune_sensitivity(p, &p->scratch);
+    }
+
+    const double nu = fabs(y) / sqrt(S);
+    kalman_debug("innovation: %+f, ", nu);
+    if (nu > p->scratch_threshold) {
         kalman_debug("                                                SCRATCH MODE\n");
         kalman_tune_sensitivity(p, &p->scratch);
-    } else if (y_abs > p->reactive_threshold) {
+    } else if (nu > p->reactive_threshold) {
         kalman_debug("                               REACTIVE MODE\n");
         kalman_tune_sensitivity(p, &p->reactive);
-    } else if (y_abs > p->adjust_threshold) {
+    } else if (nu > p->adjust_threshold) {
         kalman_debug("                ADJUST MODE\n");
         kalman_tune_sensitivity(p, &p->adjust);
     } else {
         kalman_debug("STABLE MODE\n");
         kalman_tune_sensitivity(p, &p->stable);
     }
-
-    /* Ensure reactivity and quick decay after standstill */
-
-    if (fabs(p->Xk[v]) < 5e-2) {
-        kalman_tune_sensitivity(p, &p->scratch);
-    }
-
-    /*
-     * Innovation covariance: S = H * P_pred * H^T + R
-     * With H = [1 0], this reduces to: S = P_pred[x][x] + R
-     */
-
-    const double S = P_pred[x][x] + p->coeffs->R;
 
     /*
      * Kalman gain: K = P_pred * H^T * S^-1

@@ -447,7 +447,8 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
             }
 
             qDebug().noquote() << "drift" << QString::asprintf("%+3f", m_dDriftAmt)
-                     << ", relative drift" << QString::asprintf("%+3f", m_deltaRelativeDriftAmount);
+                     << "| relative drift" << QString::asprintf("%+3f", m_deltaRelativeDriftAmount)
+                     << "| vinyl position" << QString::asprintf("%+3f", m_dVinylPosition);
 
             if (m_bForceResync) {
                 //if forceresync was set but we're no longer absolute,

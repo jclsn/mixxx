@@ -461,14 +461,14 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
     } else {
         pitch_kalman_init(&tc->pitch_kalman,
                           tc->dt,
-                          KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
-                          KALMAN_COEFFS(1e-4, 1e-2), /* adjust mode */
-                          KALMAN_COEFFS(1e-2, 1e-3), /* reactive mode */
-                          KALMAN_COEFFS(1e-1, 1e-4), /* scratch mode */
-                          1e-3, /* adjust threshold */
-                          25e-4, /* reactive threshold */
-                          40e-4, /* scratch threshold */
-                          false);
+                          KALMAN_COEFFS(1e-8, 100.0), /* stable mode */
+                          KALMAN_COEFFS(1e-2, 1e-2), /* adjust mode */
+                          KALMAN_COEFFS(1e-2, 1e-6), /* reactive mode */
+                          KALMAN_COEFFS(1e-2, 1e-6), /* scratch mode */
+                          30e-5, /* adjust threshold */
+                          200e-4, /* reactive threshold */
+                          200e-3, /* scratch threshold */
+                          true);
     }
 
     tc->ref_level = INT_MAX;
@@ -756,26 +756,34 @@ static void process_sample(struct timecoder *tc,
      */
 
     if (*correct) {
-        printf("!!! CORRECTING !!!\n");
         if (tc->def->flags & TRAKTOR_MK2)
-            dx_drift = (1.0 / tc->def->resolution) * (33 * drift);
+            dx_drift = drift / 100.0;
         else
-            dx_drift = (1.0 / tc->def->resolution) * (5 * drift);
+            dx_drift = drift / 300.0;
 
+        double cap = 2.0 * quantize_phase(tc);
+        if (fabs(dx_drift) > cap)
+            if (dx_drift < 0.0)
+                dx_drift = -cap;
+            else if (dx_drift > 0.0)
+                dx_drift = cap;
+
+        printf("NUDGING BY: %+3f\n", dx_drift);
         *correct = false;
     }
 
-    if (!tc->primary.swapped && !tc->secondary.swapped) {
-        double zero_dx = 0.0;
+    double dx;
 
-        zero_dx = zero_dx + dx_drift;
+    if (!tc->primary.swapped && !tc->secondary.swapped) {
+        dx = 0.0 + dx_drift;
+        if (!tc->forwards)
+            dx = -dx;
 
         if (tc->use_legacy_pitch_filter)
-            pitch_dt_observation(&tc->pitch, zero_dx);
+            pitch_dt_observation(&tc->pitch, dx);
         else
-            pitch_kalman_update(&tc->pitch_kalman, zero_dx);
+            pitch_kalman_update(&tc->pitch_kalman, dx);
     } else {
-        double dx;
 
         /*
          * Assumption: We usually advance by a quarter rotation,
@@ -785,10 +793,10 @@ static void process_sample(struct timecoder *tc,
 
         dx = quantize_phase(tc);
 
+        dx += dx_drift;
+
         if (!tc->forwards)
             dx = -dx;
-
-        dx = dx + dx_drift;
 
         /* printf("dx = %+3f, drift_dx = %+3f\n", dx, dx_drift); */
 
