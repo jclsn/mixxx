@@ -461,11 +461,11 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
     } else {
         pitch_kalman_init(&tc->pitch_kalman,
                           tc->dt,
-                          KALMAN_COEFFS(1e-8, 100.0), /* stable mode */
+                          KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
                           KALMAN_COEFFS(1e-2, 1e-2), /* adjust mode */
-                          KALMAN_COEFFS(1e-2, 1e-6), /* reactive mode */
+                          KALMAN_COEFFS(1e-2, 1e-4), /* reactive mode */
                           KALMAN_COEFFS(1e-2, 1e-6), /* scratch mode */
-                          30e-5, /* adjust threshold */
+                          70e-5, /* adjust threshold */
                           200e-4, /* reactive threshold */
                           200e-3, /* scratch threshold */
                           true);
