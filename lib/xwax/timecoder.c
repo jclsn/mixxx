@@ -462,12 +462,12 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
         pitch_kalman_init(&tc->pitch_kalman,
                           tc->dt,
                           KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
-                          KALMAN_COEFFS(1e-4, 1e-1), /* adjust mode */
-                          KALMAN_COEFFS(1e-3, 1e-2), /* reactive mode */
-                          KALMAN_COEFFS(1e-1, 1e-4), /* scratch mode */
+                          KALMAN_COEFFS(1e-2, 1e-6), /* adjust mode */
+                          KALMAN_COEFFS(1e-2, 1e-6), /* reactive mode */
+                          KALMAN_COEFFS(1e-2, 1e-6), /* scratch mode */
                           6e-4, /* adjust threshold */
-                          25e-4, /* reactive threshold */
-                          40e-4, /* scratch threshold */
+                          15e-4, /* reactive threshold */
+                          30e-4, /* scratch threshold */
                           false);
     }
 
@@ -484,6 +484,8 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
 
     mk2_subcode_init(&tc->upper_bitstream);
     mk2_subcode_init(&tc->lower_bitstream);
+
+    tc->first_run = true;
 }
 
 /*
@@ -756,19 +758,44 @@ static void process_sample(struct timecoder *tc,
      */
 
     if (*correct) {
-        if (tc->def->flags & TRAKTOR_MK2)
-            dx_drift = drift / 100.0;
-        else
-            dx_drift = drift / 300.0;
 
-        double cap = 2.0 * quantize_phase(tc);
-        if (fabs(dx_drift) > cap)
-            if (dx_drift < 0.0)
-                dx_drift = -cap;
-            else if (dx_drift > 0.0)
-                dx_drift = cap;
+        dx_drift = drift;
 
-        printf("NUDGING BY: %+3f\n", dx_drift);
+        double dabs = fabs(drift);
+        if (dabs > 0.1) {
+            dx_drift /= 2;
+            printf(RED);
+        } else if (dabs > 0.05) {
+            dx_drift /= 4;
+            printf(YELLOW);
+        } else if (dabs > 0.025) {
+            dx_drift /= 8;
+            printf(YELLOW);
+        } else if (dabs > 0.02) {
+            dx_drift /= 16;
+            printf(GREEN);
+        } else if (dabs > 0.01) {
+            dx_drift /= 32;
+            printf(BLUE);
+        } else if (dabs > 0.007) {
+            dx_drift /= 512;
+            printf(MAGENTA);
+        } else if (dabs > 0.005) {
+            dx_drift /= 1024;
+            printf(CYAN);
+        } else {
+            dx_drift = 0.0;
+            printf(RESET);
+        }
+
+        if (dabs < 0.005 || dabs > 0.2) {
+            dx_drift = 0.0;
+            printf(RESET);
+            printf("current drift = %+.3f ms, nudging by = %-.3f ms\n", drift*1000, dx_drift*1000);
+        } else {
+            printf("current drift = %+.3f ms, nudging by = %-.3f ms " RESET "\n", drift*1000, dx_drift*1000);
+        }
+
         *correct = false;
     }
 
@@ -793,12 +820,17 @@ static void process_sample(struct timecoder *tc,
 
         dx = quantize_phase(tc);
 
-        dx += dx_drift;
+        if(dx == ((1.0 / tc->def->resolution) / 4.0))
+            dx += dx_drift;
 
         if (!tc->forwards)
             dx = -dx;
 
-        /* printf("dx = %+3f, drift_dx = %+3f\n", dx, dx_drift); */
+        /* if (tc->first_run) { */
+        /*     dx = drift ; */
+        /*     tc->first_run = false; */
+        /*     printf(RED "FIRST RUN. SNAPPING IN PLACE!\n" RESET); */
+        /* } */
 
         if (tc->use_legacy_pitch_filter)
             pitch_dt_observation(&tc->pitch, dx);

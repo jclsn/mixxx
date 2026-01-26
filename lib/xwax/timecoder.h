@@ -81,8 +81,8 @@ struct mk2_subcode {
     unsigned int valid_counter;
     signed int avg_reading;
     signed int avg_slope;
-    bool recent_bit_flip;
 
+    bool recent_bit_flip;
     struct delayline readings;
     struct ema_filter ema_reading;
     struct ema_filter ema_slope;
@@ -127,6 +127,8 @@ struct timecoder {
 
     struct mk2_subcode upper_bitstream, lower_bitstream;
     double gain_compensation; /* Scaling factor for the derivative */
+
+    struct emaf_filter drift_filter;
 };
 
 struct timecode_def* timecoder_find_definition(const char *name, const char *lut_dir_path);

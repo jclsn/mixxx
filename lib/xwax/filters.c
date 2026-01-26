@@ -42,6 +42,42 @@ int ema(struct ema_filter *filter, const int x)
 }
 
 /*
+ * Initializes the exponential moving average filter.
+ */
+
+void emaf_init(struct emaf_filter *filter, const double alpha)
+{
+    if (!filter) {
+        errno = EINVAL;
+        perror(__func__);
+        return;
+    }
+
+    filter->alpha = alpha;
+    filter->y_old = 0;
+}
+
+/*
+ * Computes an exponential moving average with the possibility to weight newly added
+ * values with a factor alpha.
+ */
+
+double emaf(struct emaf_filter *filter, const double x)
+{
+    if (!filter) {
+        errno = EINVAL;
+        perror(__func__);
+        return -EINVAL;
+    }
+
+    double y = filter->alpha * x + (1 - filter->alpha) * filter->y_old;
+    filter->y_old = y;
+
+    return y;
+}
+
+
+/*
  * Initializes the derivative filter.
  */
 
