@@ -446,9 +446,9 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
 
             }
 
-            qDebug().noquote() << "drift" << QString::asprintf("%+3f", m_dDriftAmt)
-                     << "| relative drift" << QString::asprintf("%+3f", m_deltaRelativeDriftAmount)
-                     << "| vinyl position" << QString::asprintf("%+3f", m_dVinylPosition);
+            // qDebug().noquote() << "drift" << QString::asprintf("%+3f", m_dDriftAmt)
+            //          << "| relative drift" << QString::asprintf("%+3f", m_deltaRelativeDriftAmount)
+            //          << "| vinyl position" << QString::asprintf("%+3f", m_dVinylPosition);
 
             if (m_bForceResync) {
                 //if forceresync was set but we're no longer absolute,
@@ -604,7 +604,7 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
 double VinylControlXwax::calcDeltaRelativeDriftAmount(double deltaFilePos) {
     // Reset m_relativeDriftAmtMem in case of needle drop, file position change (hotcue, loop etc.),
     // when passthrough is enabled or is playing in reverse
-    if (std::fabs(m_deltaRelativeDriftAmount) > 1.5 ||
+    if (std::fabs(m_deltaRelativeDriftAmount) > 0.2 ||
             std::fabs(deltaFilePos) > 0.03 || // TODO: thresholds to adjust probably
             m_passthroughEnabled.toBool() || reverseButton->toBool() ||
             m_scratchPositionEnabled.toBool()) {

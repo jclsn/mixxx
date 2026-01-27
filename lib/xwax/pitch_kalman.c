@@ -81,6 +81,8 @@ void pitch_kalman_init(struct pitch_kalman *p, double dt, struct kalman_coeffs s
     /* Initialize as reactive */
 
     kalman_tune_sensitivity(p, &p->reactive);
+
+    emaf_init(&p->ema_innovation, 1e-4);
 }
 
 /*
@@ -181,9 +183,9 @@ void pitch_kalman_update(struct pitch_kalman* p, double dx)
      *       smooth the innovation before.
      */
 
-    const double y_abs = fabs(y);
+    const double y_abs = emaf(&p->ema_innovation, fabs(y));
 
-    kalman_debug("innovation: %+f, ", y);
+    kalman_debug("innovation: %+f, filtered: %+f, ", y, y_abs);
     if (y_abs > p->scratch_threshold) {
         kalman_debug("                                                SCRATCH MODE\n");
         kalman_tune_sensitivity(p, &p->scratch);

@@ -459,16 +459,31 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
     if (tc->use_legacy_pitch_filter) {
         pitch_init(&tc->pitch, tc->dt);
     } else {
-        pitch_kalman_init(&tc->pitch_kalman,
-                          tc->dt,
-                          KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
-                          KALMAN_COEFFS(1e-2, 1e-6), /* adjust mode */
-                          KALMAN_COEFFS(1e-2, 1e-6), /* reactive mode */
-                          KALMAN_COEFFS(1e-2, 1e-6), /* scratch mode */
-                          6e-4, /* adjust threshold */
-                          15e-4, /* reactive threshold */
-                          30e-4, /* scratch threshold */
-                          false);
+        if (tc->def->flags & TRAKTOR_MK2) {
+            pitch_kalman_init(&tc->pitch_kalman,
+                              tc->dt,
+                              KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
+                              KALMAN_COEFFS(1e-2, 1e-6), /* adjust mode */
+                              KALMAN_COEFFS(1e-2, 1e-6), /* reactive mode */
+                              KALMAN_COEFFS(1e-2, 1e-6), /* scratch mode */
+                              8e-4, /* adjust threshold */
+                              15e-4, /* reactive threshold */
+                              25e-4, /* scratch threshold */
+                              false);
+       } else {
+            pitch_kalman_init(&tc->pitch_kalman,
+                              tc->dt,
+                              KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
+                              KALMAN_COEFFS(1e-2, 1e-6), /* scratch mode */
+                              /* KALMAN_COEFFS(1e-2, 1e-2), /1* adjust mode *1/ */
+                              KALMAN_COEFFS(1e-2, 1e-6), /* scratch mode */
+                              /* KALMAN_COEFFS(1e-2, 1e-3), /1* reactive mode *1/ */
+                              KALMAN_COEFFS(1e-2, 1e-6), /* scratch mode */
+                              20e-5, /* adjust threshold */
+                              7e-4, /* reactive threshold */
+                              25e-4, /* scratch threshold */
+                              false);
+       }
     }
 
     tc->ref_level = INT_MAX;
@@ -484,8 +499,6 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
 
     mk2_subcode_init(&tc->upper_bitstream);
     mk2_subcode_init(&tc->lower_bitstream);
-
-    tc->first_run = true;
 }
 
 /*
@@ -757,41 +770,35 @@ static void process_sample(struct timecoder *tc,
      * counters. This occurs four time per cycle of the sinusoid.
      */
 
+    double min = 0.007;
+    double max = 0.2;
     if (*correct) {
-
-        dx_drift = drift;
+        if (tc->def->flags & TRAKTOR_MK2)
+            dx_drift = drift;
+        else {
+            min = 0.007;
+            max = 0.2;
+            dx_drift = drift / 3.0;
+        }
 
         double dabs = fabs(drift);
-        if (dabs > 0.1) {
-            dx_drift /= 2;
-            printf(RED);
-        } else if (dabs > 0.05) {
-            dx_drift /= 4;
-            printf(YELLOW);
-        } else if (dabs > 0.025) {
-            dx_drift /= 8;
-            printf(YELLOW);
-        } else if (dabs > 0.02) {
-            dx_drift /= 16;
-            printf(GREEN);
-        } else if (dabs > 0.01) {
+        if (dabs > 0.05) {
             dx_drift /= 32;
-            printf(BLUE);
-        } else if (dabs > 0.007) {
-            dx_drift /= 512;
+            printf(RED);
+        } else if (dabs > 0.01) {
+            dx_drift /= 64;
             printf(MAGENTA);
-        } else if (dabs > 0.005) {
-            dx_drift /= 1024;
-            printf(CYAN);
+        } else if (dabs > min) {
+            dx_drift /= 128;
+            printf(GREEN);
         } else {
             dx_drift = 0.0;
             printf(RESET);
         }
 
-        if (dabs < 0.005 || dabs > 0.2) {
+        if ((dabs < min) || (dabs > max)) {
             dx_drift = 0.0;
-            printf(RESET);
-            printf("current drift = %+.3f ms, nudging by = %-.3f ms\n", drift*1000, dx_drift*1000);
+            printf(RESET "current drift = %+.3f ms, nudging by = %-.3f ms\n", drift*1000, dx_drift*1000);
         } else {
             printf("current drift = %+.3f ms, nudging by = %-.3f ms " RESET "\n", drift*1000, dx_drift*1000);
         }

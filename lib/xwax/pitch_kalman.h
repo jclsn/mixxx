@@ -33,6 +33,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include "filters.h"
+
 /* Struct for the Kalman filter coefficients R and Q */
 
 struct kalman_coeffs {
@@ -71,6 +73,8 @@ struct pitch_kalman {
     struct kalman_coeffs adjust;
     struct kalman_coeffs reactive;
     struct kalman_coeffs scratch;
+
+    struct emaf_filter ema_innovation;
 };
 
 void pitch_kalman_init(struct pitch_kalman *p, double dt, struct kalman_coeffs stable,
