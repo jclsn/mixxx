@@ -848,15 +848,20 @@ void timecoder_submit(struct timecoder *tc, signed short *pcm, size_t npcm, doub
         if (tc->def->flags & TRAKTOR_MK2) {
             process_sample(tc, primary, secondary, drift);
 
-            /* 
+            /*
              * Display the derivative in the monitor. Since the signal is not
              * a perfect ring on the x-y-plane, but jumps up and down a bit,
              * it looks to small in the scope. Therefore a multiplication by
              * two is necessary.
              */
 
-            update_monitor(tc, tc->primary.mk2.deriv_scaled * 2,
-                    tc->secondary.mk2.deriv_scaled * 2);
+            /* Only draw the scope when we have a relevant signal */
+            if (tc->dB > -40.0) {
+                update_monitor(tc, tc->primary.mk2.deriv_scaled * 2,
+                        tc->secondary.mk2.deriv_scaled * 2);
+            } else {
+                update_monitor(tc, 0.0, 0.0);
+            }
         } else {
             process_sample(tc, primary, secondary, drift);
             update_monitor(tc, left, right);
