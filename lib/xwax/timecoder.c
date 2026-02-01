@@ -410,13 +410,13 @@ static void init_channel(struct timecode_def *def, struct timecoder_channel *ch,
 
     if (def->flags & TRAKTOR_MK2) {
         init_mk2_channel(ch);
-        ema_init(&ch->freq_detector, 0.2);
+        ema_init(&ch->freq_detector, 7e-1);
     } else {
-        ema_init(&ch->freq_detector, 0.5);
+        init_mk2_channel(ch);
+        ema_init(&ch->freq_detector, 5e-1);
     }
 
     delayline_init(&ch->delayline_deriv);
-    apbp_init(&ch->bandpass, 3000, 10000, sample_rate);
 }
 
 /*
@@ -450,52 +450,40 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
     init_channel(tc->def, &tc->secondary, sample_rate);
 
     tc->use_legacy_pitch_filter = pitch_estimator; /* Switch for pitch filter type */
-
     if (tc->use_legacy_pitch_filter) {
+
         pitch_init(&tc->pitch, tc->dt);
 
-        if (tc->def->flags & TRAKTOR_MK2)
+        if (tc->def->flags & TRAKTOR_MK2) {
             pitch_kalman_init(&tc->pitch_kalman, tc->dt,
-                    KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
-                    KALMAN_COEFFS(1e-2, 1e-3), /* medium mode */
-                    KALMAN_COEFFS(1e-1, 1e-4), /* reactive mode */
+                    KALMAN_COEFFS(1e-16, 1e-2), /* stable mode */
+                    KALMAN_COEFFS(1e-2, 1e-6), /* medium mode */
+                    KALMAN_COEFFS(1e-2, 1e-6), /* reactive mode */
                     15,   /* medium threshold  */
                     20); /* reactive threshold  */
-        else
+        } else {
             pitch_kalman_init(&tc->pitch_kalman, tc->dt,
-                    KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
-                    KALMAN_COEFFS(1e-2, 1e-3), /* medium mode */
-                    KALMAN_COEFFS(1.0, 1e-8), /* reactive mode */
-                    15,   /* medium threshold  */
+                    KALMAN_COEFFS(1e-16, 1e-2), /* stable mode */
+                    KALMAN_COEFFS(1e-2, 1e-6), /* medium mode */
+                    KALMAN_COEFFS(1e-2, 1e-6), /* reactive mode */
+                    5,   /* medium threshold  */
                     20); /* reactive threshold  */
+        }
 
         /* Fc=3 */
     } else {
         pitch_kalman_init(&tc->pitch_kalman, tc->dt,
                 KALMAN_COEFFS(1e-8, 10.0), /* stable mode */
-                KALMAN_COEFFS(1e-4, 1e-1), /* medium mode */
-                KALMAN_COEFFS(1e-1, 1e-4), /* reactive mode */
+                KALMAN_COEFFS(1e-2, 1e-7), /* medium mode */
+                KALMAN_COEFFS(1e-2, 1e-7), /* reactive mode */
                 6e-4,   /* medium threshold  */
                 15e-4); /* reactive threshold  */
-
-        double b[5] = {2.570614602877119e-13,
-                       1.0282458411508477e-12,
-                       1.5423687617262716e-12,
-                       1.0282458411508477e-12,
-                       2.570614602877119e-13};
-
-        double a[5] = {1.0,
-                       -3.99627692658869,
-                       5.988837708838654,
-                       -3.9888446303594574,
-                       0.9962838481136069};
-        tc->pitch_iir = iir_init(ORD(b), b, a);
 
         double q  = 1e5;        /* try 1e4..1e6; higher -> more reactive */
         double r  = 200.0*200.0;       /* if IF std ≈ 200 Hz, variance = 40000 */
         fk_init(&tc->kalman_freq, tc->dt, 1.5 * tc->def->resolution, q, r);
-    }
 
+    }
     tc->ref_level = INT_MAX;
     tc->bitstream = 0;
     tc->timecode = 0;
@@ -724,11 +712,12 @@ static void process_sample(struct timecoder *tc,
         delayline_push(&tc->secondary.delayline_deriv, smoothed_secondary);
 
     } else {
+        mk2_process_carrier(tc, primary, secondary);
         detect_zero_crossing(&tc->primary, primary, tc->zero_alpha, tc->threshold);
         detect_zero_crossing(&tc->secondary, secondary, tc->zero_alpha, tc->threshold);
 
-        smoothed_primary = ema(&tc->primary.freq_detector, primary);
-        smoothed_secondary = ema(&tc->secondary.freq_detector, secondary);
+        smoothed_primary = ema(&tc->primary.freq_detector, tc->primary.mk2.deriv);
+        smoothed_secondary = ema(&tc->secondary.freq_detector, tc->secondary.mk2.deriv);
 
         delayline_push(&tc->primary.delayline_deriv, smoothed_primary);
         delayline_push(&tc->secondary.delayline_deriv, smoothed_secondary);
@@ -741,30 +730,13 @@ static void process_sample(struct timecoder *tc,
     int sin_nm1 = *delayline_at(&tc->secondary.delayline_deriv, 1);
 
     double dphi = instant_phase_diff(cos_n, sin_n, cos_nm1, sin_nm1);
-    double dphitc = 2 * M_PI * drift;
 
-    /* if (timecoder_get_position(tc, NULL) != -1 && fabs(dphitc) < fabs(dphi)) { */
-    /*     dphi = dphi + 0.1 * dphitc; */
-    /*     /1* printf("dphi = %+3f, dphitc = %+3f\n", dphi, dphitc); *1/ */
-    /* } */
-
-    /* double dphi_filtered = iir_filter(tc->pitch_iir, dphi); */
     pitch_kalman_update(&tc->pitch_kalman, dphi);
     double dphi_filtered = tc->pitch_kalman.Xk[1];
     double f = dphi_filtered / (2.0 * M_PI);
-
-    /* double f = instant_freq(cos_n, sin_n, cos_nm1, sin_nm1, 48000); */
-    /* f = iir_filter(tc->pitch_iir, f); */
-
-    /* double f = instant_freq2(tc->pitch_iir, cos_n, sin_n, cos_nm1, sin_nm1, tc->sample_rate); */
-
-    /* f = butterworth(&tc->pitch_butter, f); */
-    /* f = fk_update(&tc->kalman_freq, f); */
-    /* f = emaf(&tc->freq_ema, f); */
     double pitch = (f / tc->def->resolution);
 
-    printf("pitch = %+3f, freq = %+7f\n", pitch, f);
-
+    /* printf("pitch = %+3f, freq = %+7f\n", pitch, f); */
 
     /* If an axis has been crossed, use the direction of the crossing
      * to work out the direction of the vinyl */
@@ -788,8 +760,12 @@ static void process_sample(struct timecoder *tc,
     }
 
 
+    printf("db = %f\n", tc->dB);
     /* tc->pitch_kalman.Xk[1] = pitch; */
-    tc->pitch.v = pitch;
+    if (tc->dB > -40.0)
+        tc->pitch.v = pitch;
+    else
+        tc->pitch.v = 0.0;
 
     /* If we have crossed the primary channel in the right polarity,
      * it's time to read off a timecode 0 or 1 value */
@@ -797,7 +773,7 @@ static void process_sample(struct timecoder *tc,
     if (tc->def->flags & TRAKTOR_MK2) {
         if (tc->secondary.swapped)
         {
-            int reading = *delayline_at(&tc->secondary.mk2.delayline, 3);
+            int reading = *delayline_at(&tc->secondary.mk2.delayline, 1);
             mk2_process_timecode(tc, reading);
         }
     } else {
