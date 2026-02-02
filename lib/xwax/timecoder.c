@@ -457,15 +457,15 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
         if (tc->def->flags & TRAKTOR_MK2) {
             pitch_kalman_init(&tc->pitch_kalman, tc->dt,
                     KALMAN_COEFFS(1e-16, 1e-2), /* stable mode */
-                    KALMAN_COEFFS(1e-2, 1e-6), /* medium mode */
-                    KALMAN_COEFFS(1e-2, 1e-6), /* reactive mode */
+                    KALMAN_COEFFS(0.018, 7e-6), /* medium mode */
+                    KALMAN_COEFFS(0.018, 7e-6), /* reactive mode */
                     15,   /* medium threshold  */
                     20); /* reactive threshold  */
         } else {
             pitch_kalman_init(&tc->pitch_kalman, tc->dt,
                     KALMAN_COEFFS(1e-16, 1e-2), /* stable mode */
-                    KALMAN_COEFFS(1e-2, 1e-6), /* medium mode */
-                    KALMAN_COEFFS(1e-2, 1e-6), /* reactive mode */
+                    KALMAN_COEFFS(0.018, 7e-6), /* medium mode */
+                    KALMAN_COEFFS(0.018, 7e-6), /* reactive mode */
                     5,   /* medium threshold  */
                     20); /* reactive threshold  */
         }
