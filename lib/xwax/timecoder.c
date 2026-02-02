@@ -478,7 +478,6 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
                 KALMAN_COEFFS(1e-2, 1e-7), /* reactive mode */
                 6e-4,   /* medium threshold  */
                 15e-4); /* reactive threshold  */
-
     }
     tc->ref_level = INT_MAX;
     tc->bitstream = 0;
