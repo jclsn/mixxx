@@ -54,7 +54,12 @@ struct timecode_def {
     struct lut_mk2 lut_mk2; /* MK2 version */
 };
 
-struct timecoder_channel_mk2 {
+struct timecoder_channel {
+    bool positive, /* wave is in positive part of cycle */
+	swapped; /* wave recently swapped polarity */
+    signed int zero;
+    unsigned int crossing_ticker; /* samples since we last crossed zero */
+
     int rms, rms_deriv; /* RMS values for the signal and its derivative */
     signed int deriv, deriv_scaled; /* Derivative and its scaled version */
 
@@ -62,15 +67,7 @@ struct timecoder_channel_mk2 {
     struct ewma_filter ewma_filter;
     struct differentiator differentiator;
     struct root_mean_square rms_filter, rms_deriv_filter;
-};
 
-struct timecoder_channel {
-    bool positive, /* wave is in positive part of cycle */
-	swapped; /* wave recently swapped polarity */
-    signed int zero;
-    unsigned int crossing_ticker; /* samples since we last crossed zero */
-
-    struct timecoder_channel_mk2 mk2;
 };
 
 struct mk2_subcode {
