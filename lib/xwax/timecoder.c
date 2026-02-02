@@ -703,6 +703,20 @@ static void track_quadrature_phase(struct timecoder *tc, bool direction_changed)
 }
 
 /*
+ * Computes the phase difference of a given sine-cosine pair using
+ * complex number theory and integer arithemetic for max efficiency.
+ */
+
+static inline double phase_difference(const int *cos0, const int *sin0,
+                                      const int *cos1, const int *sin1)
+{
+    long long real = (long long)*cos0 * *cos1 + (long long)*sin0 * *sin1;
+    long long imag = (long long)*sin0 * *cos1 - (long long)*cos0 * *sin1;
+
+    return atan2((double)imag, (double)real);
+}
+
+/*
  * Process a single sample from the incoming audio
  *
  * The two input signals (primary and secondary) are in the full range
