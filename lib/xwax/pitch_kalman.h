@@ -74,8 +74,7 @@ struct pitch_kalman_filter {
 };
 
 void pitch_kalman_init(struct pitch_kalman_filter *p, double dt, struct kalman_coeffs stable,
-                       struct kalman_coeffs adjust, struct kalman_coeffs reactive, struct kalman_coeffs scratch,
-                       double adjust_threshold, double reactive_threshold, double scratch_threshold, bool debug);
+                       struct kalman_coeffs scratch, double scratch_threshold, bool debug);
 void pitch_kalman_update(struct pitch_kalman_filter *p, double dx);
 
 /*
