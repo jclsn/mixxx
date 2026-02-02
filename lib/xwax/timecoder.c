@@ -729,14 +729,20 @@ static void process_sample(struct timecoder *tc,
     int sin_n = *delayline_at(&tc->secondary.delayline_deriv, 0);
     int sin_nm1 = *delayline_at(&tc->secondary.delayline_deriv, 1);
 
-    double dphi = instant_phase_diff(cos_n, sin_n, cos_nm1, sin_nm1);
+    double dphi = 0.0;
+    double f = 0.0;
+    double pitch = 0.0;
+    if (tc->dB > -40.0) {
+        dphi = instant_phase_diff(cos_n, sin_n, cos_nm1, sin_nm1);
 
-    pitch_kalman_update(&tc->pitch_kalman, dphi);
-    double dphi_filtered = tc->pitch_kalman.Xk[1];
-    double f = dphi_filtered / (2.0 * M_PI);
-    double pitch = (f / tc->def->resolution);
+        pitch_kalman_update(&tc->pitch_kalman, dphi);
+        double dphi_filtered = tc->pitch_kalman.Xk[1];
+        f = dphi_filtered / (2.0 * M_PI);
+        pitch = (f / tc->def->resolution);
+    }
 
-    /* printf("pitch = %+3f, freq = %+7f\n", pitch, f); */
+    if (tc->def->flags & TRAKTOR_MK2)
+        printf("pitch = %+3f, freq = %+7f\n", pitch, f);
 
     /* If an axis has been crossed, use the direction of the crossing
      * to work out the direction of the vinyl */
@@ -744,11 +750,10 @@ static void process_sample(struct timecoder *tc,
     if (tc->primary.swapped || tc->secondary.swapped) {
         bool forwards;
 
-        if (tc->primary.swapped) {
-            forwards = (tc->primary.positive != tc->secondary.positive);
-        } else {
-            forwards = (tc->primary.positive == tc->secondary.positive);
-        }
+        if (f >= 0.0)
+            forwards = true;
+        else
+            forwards = false;
 
         if (tc->def->flags & SWITCH_PHASE)
 	    forwards = !forwards;
@@ -760,7 +765,7 @@ static void process_sample(struct timecoder *tc,
     }
 
 
-    printf("db = %f\n", tc->dB);
+    /* printf("db = %f\n", tc->dB); */
     /* tc->pitch_kalman.Xk[1] = pitch; */
     if (tc->dB > -40.0)
         tc->pitch.v = pitch;
