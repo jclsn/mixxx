@@ -479,10 +479,6 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def,
                 6e-4,   /* medium threshold  */
                 15e-4); /* reactive threshold  */
 
-        double q  = 1e5;        /* try 1e4..1e6; higher -> more reactive */
-        double r  = 200.0*200.0;       /* if IF std ≈ 200 Hz, variance = 40000 */
-        fk_init(&tc->kalman_freq, tc->dt, 1.5 * tc->def->resolution, q, r);
-
     }
     tc->ref_level = INT_MAX;
     tc->bitstream = 0;
