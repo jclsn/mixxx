@@ -132,7 +132,7 @@ static struct timecode_def timecodes[] = {
      .length = 1820000,
      .safe = 1800000,
      .threshold = (128 << 16),
-     },    
+     },
     {
      .name = "traktor_mk2_b",
      .desc = "Traktor Scratch MK2, side B",
@@ -150,7 +150,7 @@ static struct timecode_def timecodes[] = {
      .length = 2570000,
      .safe = 2550000,
      .threshold = (128 << 16),
-     },    
+     },
     {
      .name = "traktor_mk2_cd",
      .desc = "Traktor Scratch MK2, CD",
