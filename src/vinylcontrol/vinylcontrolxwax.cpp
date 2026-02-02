@@ -442,7 +442,7 @@ void VinylControlXwax::analyzeSamples(CSAMPLE* pSamples, size_t nFrames) {
                 m_deltaRelativeDriftAmount = calcDeltaRelativeDriftAmount(m_deltaFilePos);
             }
 
-            qDebug() << "drift" << m_dDriftAmt << ", relative drift" << m_deltaRelativeDriftAmount;
+            // qDebug() << "drift" << m_dDriftAmt << ", relative drift" << m_deltaRelativeDriftAmount;
 
             if (m_bForceResync) {
                 //if forceresync was set but we're no longer absolute,
