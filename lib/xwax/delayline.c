@@ -20,7 +20,9 @@ int *delayline_at(struct delayline *delayline, ptrdiff_t i)
 
     ptrdiff_t index = delayline->current + i;
 
-    if ((size_t)index >= delayline->size)
+    while (index < 0)
+        index += delayline->size;
+    while (index >= delayline->size)
         index -= delayline->size;
 
     return &delayline->array[index];
