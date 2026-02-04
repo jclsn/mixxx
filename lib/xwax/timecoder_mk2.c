@@ -191,7 +191,7 @@ out:
     fclose(fp);
 
     if (hashes != j || def->length != i)
-        fprintf(stderr, "Something went wrong: ");
+        fprintf(stderr, "LUT size doesn't match definition': ");
 
     fprintf(stderr, "Wrote %d hashes and %d slots to disk\n", j, i);
 
@@ -273,7 +273,7 @@ out:
     if (hashes == j && def->length == i)
         def->lookup = true;
     else
-        fprintf(stderr, "Something went wrong: ");
+        fprintf(stderr, "LUT size doesn't match definition': ");
 
     fprintf(stderr, "Loaded %d hashes and %d slots from disk\n", j, i);
 
