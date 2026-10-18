@@ -12,7 +12,7 @@
 
 BasedOnStyle: LLVM
 Language: Cpp
-ColumnLimit: 100
+ColumnLimit: 80
 
 # Indentation
 IndentWidth: 4

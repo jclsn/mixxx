@@ -50,6 +50,14 @@
 
 #define REF_PEAKS_AVG 48 /* in wave cycles */
 
+/* Fallback for when the channels lose quadrature, see check_quadrature() */
+
+#define QUAD_TAU_MS 2.0 /* averaging time of the quadrature check and the frequency */
+#define QUAD_ENTER 0.55 /* quadrature loss above which the phase is not used */
+#define QUAD_LEAVE 0.40 /* quadrature loss below which it is used again */
+#define QUAD_MIN_FREQ 10000.0 /* Hz, the loss only happens at high carrier frequencies */
+#define QUAD_AGREE 0.7 /* relative agreement of frequency and phase to take over */
+
 /* The number of correct bits which come in before the timecode is
  * declared valid. Set this too low, and risk the record skipping
  * around (often to blank areas of track) during scratching */
@@ -84,7 +92,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -101,7 +109,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -118,7 +126,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -136,7 +144,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -154,7 +162,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -178,7 +186,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.0,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -202,7 +210,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.0,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -226,7 +234,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.0,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -244,7 +252,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -262,7 +270,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -280,7 +288,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -298,7 +306,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -315,7 +323,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
     {
@@ -332,7 +340,7 @@ static struct timecode_def timecodes[] = {
             .trigger = 1.5,
             .gate = 1.2,
             .tau = 1.5,
-            .hold = 250,
+            .hold = 50,
         },
     },
 };
@@ -593,6 +601,10 @@ void timecoder_init(struct timecoder *tc, struct timecode_def *def, double speed
     tc->dphi_hold_samples = tc->def->phase_reject.hold * sample_rate / 1000;
     tc->dphi_rejected = tc->dphi_hold_samples;
 
+    tc->quad = malloc(sizeof(struct quadrature_fallback));
+    tc->quad->alpha = 1.0 - exp(-tc->dt / (QUAD_TAU_MS * 1e-3));
+    tc->quad->direction = 1;
+
     if (tc->use_legacy_pitch_filter) {
         pitch_init(&tc->pitch_filter, tc->dt);
     } else {
@@ -656,6 +668,8 @@ void timecoder_clear(struct timecoder *tc)
 
     savgol_destroy(tc->primary.savgol_filter);
     savgol_destroy(tc->secondary.savgol_filter);
+
+    free(tc->quad);
 }
 
 /*
@@ -824,6 +838,133 @@ static inline double phase_difference(const int cos0, const int sin0, const int 
 }
 
 /*
+ * Measure how well the two channels are in quadrature
+ *
+ * The phase difference only means something while the two channels are 90
+ * degrees apart, i.e. the x-y plot of the carrier is a circle. Above about
+ * 10 kHz the lateral and vertical responses of the stylus diverge, so the
+ * channels end up nearly in phase and the x-y plot collapses into a thin
+ * ellipse. A Traktor MK2 record (2.5 kHz carrier) gets there at about 4x
+ * speed, which a backspin easily exceeds.
+ *
+ * With z = x + iy the loss is |<z^2>| / <|z|^2>: 0 for a circle, 1 for a line.
+ */
+
+static double check_quadrature(struct quadrature_fallback *q, double x,
+                               double y)
+{
+    q->re += q->alpha * ((x * x - y * y) - q->re);
+    q->im += q->alpha * ((2.0 * x * y) - q->im);
+    q->pow += q->alpha * ((x * x + y * y) - q->pow);
+
+    q->loss = q->pow > 0.0 ? sqrt(q->re * q->re + q->im * q->im) / q->pow : 0.0;
+
+    return q->loss;
+}
+
+/*
+ * The speed as given by the frequency of the carrier, without direction
+ *
+ * Unlike the phase difference this needs only one sinusoid. It uses the
+ * lateral component of the stylus movement, which is the one that survives
+ * the loss of quadrature: the sum or the difference of the channels,
+ * depending on their polarity, so whichever is stronger.
+ *
+ * For a sinusoid s[n - 1] + s[n + 1] = 2 cos(w) s[n], solved for w in the
+ * least squares sense over a running average.
+ *
+ * x and y are first differences of the input: like the derivative they remove
+ * the level shifts of the bit encoding, but unlike the smoothed derivative
+ * they keep the carrier at high speeds, as the smoothing is tuned to the
+ * nominal carrier frequency.
+ */
+
+static double lateral_speed(struct timecoder *tc, double x, double y)
+{
+    struct quadrature_fallback *q = tc->quad;
+    const double a = q->alpha;
+    double u = x + y, w = x - y;
+
+    q->num_u += a * (q->u1 * (q->u2 + u) - q->num_u);
+    q->den_u += a * (q->u1 * q->u1 - q->den_u);
+    q->num_w += a * (q->w1 * (q->w2 + w) - q->num_w);
+    q->den_w += a * (q->w1 * q->w1 - q->den_w);
+
+    q->u2 = q->u1;
+    q->u1 = u;
+    q->w2 = q->w1;
+    q->w1 = w;
+
+    double num = q->den_u > q->den_w ? q->num_u : q->num_w;
+    double den = q->den_u > q->den_w ? q->den_u : q->den_w;
+    if (den <= 0.0)
+        return 0.0;
+
+    double cos_w = num / (2.0 * den);
+    if (cos_w > 1.0)
+        cos_w = 1.0;
+    else if (cos_w < -1.0)
+        cos_w = -1.0;
+
+    q->speed = acos(cos_w)
+        / (2.0 * M_PI * timecoder_get_resolution(tc) * tc->dt);
+
+    return q->speed;
+}
+
+/*
+ * Get the phase difference from the carrier frequency while the channels are
+ * not in quadrature
+ *
+ * Returns true and sets *dphi when the fallback is in use. Its direction is
+ * the one from before the quadrature got lost, as the record does not change
+ * direction at these speeds without slowing down first.
+ */
+
+static bool quadrature_fallback(struct timecoder *tc)
+{
+    struct quadrature_fallback *q = tc->quad;
+
+    /* The quadrature is checked on the same signal as the phase difference */
+
+    double loss =
+        check_quadrature(q, *(int *)rb_at(tc->primary.delayline_deriv, 0),
+                         *(int *)rb_at(tc->secondary.delayline_deriv, 0));
+
+    double x = *(int *)rb_at(tc->primary.delayline, 0)
+        - *(int *)rb_at(tc->primary.delayline, 1);
+    double y = *(int *)rb_at(tc->secondary.delayline, 0)
+        - *(int *)rb_at(tc->secondary.delayline, 1);
+
+    double speed = lateral_speed(tc, x, y);
+    double freq = speed * timecoder_get_resolution(tc);
+
+    if (!q->active) {
+        /* Only take over from a phase that agreed with the frequency until
+         * now, so that noise read as a high frequency cannot take over */
+
+        double ref_speed = fabs(tc->dphi_ref)
+            / (2.0 * M_PI * timecoder_get_resolution(tc) * tc->dt);
+        bool plausible = fabs(speed - ref_speed) < QUAD_AGREE * ref_speed;
+
+        if (loss > QUAD_ENTER && freq > QUAD_MIN_FREQ && plausible) {
+            q->active = true;
+            q->direction = tc->dphi_ref < 0.0 ? -1 : 1;
+        }
+    } else if (loss < QUAD_LEAVE || freq < 0.8 * QUAD_MIN_FREQ) {
+        q->active = false;
+    }
+
+    if (!q->active)
+        return false;
+
+    tc->dphi_fallback = q->direction * speed * 2.0 * M_PI
+        * timecoder_get_resolution(tc) * tc->dt;
+
+    return true;
+}
+
+/*
  * Discard a phase difference that does not check out
  *
  * When the stylus leaves the groove the carrier fades and the phase difference
@@ -938,7 +1079,15 @@ static void process_sample(struct timecoder *tc, signed int primary, signed int 
                                     *(int *)rb_at(tc->primary.delayline_deriv, 1),
                                     *(int *)rb_at(tc->secondary.delayline_deriv, 1));
 
-        tc->dphi = reject_phase_jumps(tc, tc->dphi);
+        if (quadrature_fallback(tc)) {
+            /* Keep the reference of the phase gate on the true speed, so it
+             * compares against the right one once the phase is usable again */
+            tc->dphi = tc->dphi_fallback;
+            tc->dphi_ref = ewmaf(&tc->dphi_filter, tc->dphi);
+            tc->dphi_rejected = 0;
+        } else {
+            tc->dphi = reject_phase_jumps(tc, tc->dphi);
+        }
 
         double ddphi = 0.0; /* Derivative of the phase difference */
 

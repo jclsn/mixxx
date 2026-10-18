@@ -95,6 +95,21 @@ struct mk2_subcode {
     struct ewma_filter ewma_slope;
 };
 
+/* Fallback for when the two channels lose quadrature */
+
+struct quadrature_fallback {
+    double alpha; /* weight of the running averages */
+    double re, im, pow; /* running averages of z^2 and |z|^2 */
+    double loss; /* 0: in quadrature, 1: channels in phase */
+
+    double u1, u2, w1, w2; /* last two samples of the sum and difference */
+    double num_u, den_u, num_w, den_w; /* frequency estimator, see lateral_speed() */
+    double speed; /* speed from the carrier frequency, without direction */
+
+    bool active;
+    int direction;
+};
+
 struct timecoder {
     struct timecoder_channel primary, secondary;
     struct timecode_def *def;
@@ -110,6 +125,7 @@ struct timecoder {
     /* Pitch information */
 
     double dphi; /* Phase difference */
+    double dphi_fallback; /* Fallback phase difference when channels are out of quadrature */
     double freq; /* Current carrier frequency */
     double pitch; /* Current pitch */
 
@@ -121,6 +137,7 @@ struct timecoder {
     struct pitch_kalman_filter pitch_kalman_filter;
 
     struct ewma_filter dphi_filter; /* Running average of the accepted phase differences */
+    struct quadrature_fallback *quad; /* Struct to track the quadrature of the signal */
     double dphi_gate, dphi_ref; /* Phase gate for the phase filter */
     unsigned int dphi_rejected, dphi_hold_samples;
 
