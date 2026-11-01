@@ -2,6 +2,7 @@
 #include "waveform/widgets/allshader/waveformwidget.h"
 
 #include <QApplication>
+#include <QOpenGLWindow>
 #include <QWheelEvent>
 
 #include "rendergraph/engine.h"
@@ -181,13 +182,20 @@ void WaveformWidget::resizeRenderer(int, int, float) {
 }
 
 void WaveformWidget::resizeGL(int w, int h) {
-    w = static_cast<int>(std::lround(static_cast<qreal>(w) / devicePixelRatioF()));
-    h = static_cast<int>(std::lround(static_cast<qreal>(h) / devicePixelRatioF()));
+    // w and h are in pixels of the OpenGL window's framebuffer, so they must be
+    // converted with the device pixel ratio of that window. It can differ from
+    // the one of this widget, e.g. with fractional scaling on Wayland.
+    const qreal framebufferDevicePixelRatio = getOpenGLWindow()
+            ? getOpenGLWindow()->devicePixelRatio()
+            : devicePixelRatioF();
+    w = static_cast<int>(std::lround(static_cast<qreal>(w) / framebufferDevicePixelRatio));
+    h = static_cast<int>(std::lround(static_cast<qreal>(h) / framebufferDevicePixelRatio));
 
     // Many allshader components relies on WaveformWidgetRenderer::getWidth and
     // WaveformWidgetRenderer::getHeight to update their rendering stack, so we
     // must resize the renderer first, before updating the rendergraph
-    WaveformWidgetRenderer::resizeRenderer(w, h, static_cast<float>(devicePixelRatio()));
+    WaveformWidgetRenderer::resizeRenderer(
+            w, h, static_cast<float>(framebufferDevicePixelRatio));
     m_pEngine->resize(w, h);
 }
 
