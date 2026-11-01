@@ -204,8 +204,10 @@ void WaveformWidgetRenderer::onPreRender(VSyncTimeProvider* vsyncThread) {
                 type <= ::WaveformRendererAbstract::Slip;
                 type++) {
             // Avoid pixel jitter in play position by rounding to the nearest track
-            // pixel.
-            m_pos[type] = round(truePos[type] * m_trackPixelCount) / m_trackPixelCount;
+            // pixel. Use device pixels, so that the waveform only moves by whole
+            // device pixels also with a fractional device pixel ratio.
+            const double trackDevicePixelCount = m_trackPixelCount * m_devicePixelRatio;
+            m_pos[type] = round(truePos[type] * trackDevicePixelCount) / trackDevicePixelCount;
             m_posVSample[type] = static_cast<int>(m_pos[type] * m_totalVSamples);
             m_truePosSample[type] = truePos[type] * static_cast<double>(m_trackSamples);
             m_firstDisplayedPosition[type] = m_pos[type] - displayedLengthLeft;
