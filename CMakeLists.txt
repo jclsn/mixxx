@@ -2016,6 +2016,7 @@ if(QOPENGL)
       src/waveform/renderers/allshader/waveformrendererslipmode.cpp
       src/waveform/renderers/allshader/waveformrendererfiltered.cpp
       src/waveform/renderers/allshader/waveformrendererhsv.cpp
+      src/waveform/renderers/allshader/waveformrendererspectrum.cpp
       src/waveform/renderers/allshader/waveformrendererpreroll.cpp
       src/waveform/renderers/allshader/waveformrendererrgb.cpp
       src/waveform/renderers/allshader/waveformrenderertextured.cpp

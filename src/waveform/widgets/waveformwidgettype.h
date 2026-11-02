@@ -17,6 +17,8 @@ class WaveformWidgetType {
         VSyncTest = 9, // 9  VSync GL
         RGB = 12,      // 12 RGB GLSL
         Stacked = 16,  // 16 RGB Stacked
+        // Values up to 26 were used by removed waveform types, see upgrade.cpp
+        Spectrum = 27, // 27 Spectrum colored
         Invalid,       // Don't use! Used to indicate invalid/unknown type, as
                        // Count_WaveformWidgetType used to.
     };
@@ -28,6 +30,7 @@ class WaveformWidgetType {
             WaveformWidgetType::VSyncTest,
             WaveformWidgetType::RGB,
             WaveformWidgetType::Stacked,
+            WaveformWidgetType::Spectrum,
     };
 };
 

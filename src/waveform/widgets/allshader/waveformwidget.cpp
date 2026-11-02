@@ -15,6 +15,7 @@
 #include "waveform/renderers/allshader/waveformrendererrgb.h"
 #include "waveform/renderers/allshader/waveformrenderersimple.h"
 #include "waveform/renderers/allshader/waveformrendererslipmode.h"
+#include "waveform/renderers/allshader/waveformrendererspectrum.h"
 #include "waveform/renderers/allshader/waveformrendererstem.h"
 #include "waveform/renderers/allshader/waveformrenderertextured.h"
 #include "waveform/renderers/allshader/waveformrendermark.h"
@@ -133,6 +134,8 @@ WaveformWidget::addWaveformSignalRenderer(WaveformWidgetType::Type type,
     case ::WaveformWidgetType::Stacked:
         return addWaveformSignalRenderer<WaveformRendererFiltered>(
                 true, options); // true for RGB Stacked
+    case ::WaveformWidgetType::Spectrum:
+        return addWaveformSignalRenderer<WaveformRendererSpectrum>(options);
     default:
         break;
     }

@@ -56,6 +56,9 @@ class allshader::WaveformWidget final : public ::WGLWidget,
         case WaveformWidgetType::Type::Stacked:
             options = ::WaveformRendererSignalBase::Option::HighDetail;
             break;
+        case WaveformWidgetType::Type::Spectrum:
+            options = ::WaveformRendererSignalBase::Option::SplitStereoSignal;
+            break;
         default:
             break;
         }
