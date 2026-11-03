@@ -8,6 +8,8 @@
 #include "qmltrackproxy.h"
 #include "track/track.h"
 #include "util/math.h"
+#include "waveform/renderers/waveformoverviewrenderer.h"
+#include "waveform/renderers/waveformspectrumcolor.h"
 #include "waveform/waveformwidgetfactory.h"
 
 namespace {
@@ -253,6 +255,9 @@ void QmlWaveformOverview::paint(QPainter* pPainter) {
         case Renderer::HSV:
             drawHsv(pPainter, m_channels, pWaveform, currentCompletion);
             break;
+        case Renderer::Spectrum:
+            drawSpectrum(pPainter, m_channels, pWaveform, currentCompletion);
+            break;
         default:
             drawRgb(pPainter, m_channels, pWaveform, currentCompletion);
         }
@@ -398,6 +403,42 @@ void QmlWaveformOverview::drawHsv(QPainter* pPainter,
         if (channels.testFlag(ChannelFlag::RightChannel)) {
             pPainter->drawLine(QPointF(offsetX, 0), QPointF(offsetX, rightAll));
         }
+    }
+}
+
+void QmlWaveformOverview::drawSpectrum(QPainter* pPainter,
+        Channels channels,
+        ConstWaveformPointer pWaveform,
+        int completion) const {
+    const double offsetX = completion / 2.0;
+    const int leftAll = pWaveform->getAll(completion);
+    const int rightAll = pWaveform->getAll(completion + 1);
+    if (!leftAll && !rightAll) {
+        return;
+    }
+
+    const float spectralPosition = waveformSpectrumColor::spectralPosition(
+            static_cast<float>(pWaveform->getLow(completion) +
+                    pWaveform->getLow(completion + 1)),
+            static_cast<float>(pWaveform->getMid(completion) +
+                    pWaveform->getMid(completion + 1)),
+            static_cast<float>(pWaveform->getHigh(completion) +
+                    pWaveform->getHigh(completion + 1)));
+    const float amplitude = static_cast<float>(std::max(leftAll, rightAll)) / 255.f;
+    const QVector3D color = waveformSpectrumColor::color(spectralPosition) *
+            waveformSpectrumColor::brightness(amplitude);
+
+    if (!m_stereo) {
+        waveformOverviewRenderer::drawSpectrumColumn(
+                pPainter, offsetX, 0, leftAll + rightAll, color);
+        return;
+    }
+
+    if (channels.testFlag(ChannelFlag::LeftChannel)) {
+        waveformOverviewRenderer::drawSpectrumColumn(pPainter, offsetX, 0, -leftAll, color);
+    }
+    if (channels.testFlag(ChannelFlag::RightChannel)) {
+        waveformOverviewRenderer::drawSpectrumColumn(pPainter, offsetX, 0, rightAll, color);
     }
 }
 

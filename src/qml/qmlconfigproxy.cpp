@@ -1,5 +1,6 @@
 #include "qml/qmlconfigproxy.h"
 
+#include <QMetaEnum>
 #include <Qt>
 #include <algorithm>
 
@@ -11,6 +12,7 @@
 #include "preferences/colorpalettesettings.h"
 #include "preferences/constants.h"
 #include "util/color/predefinedcolorpalettes.h"
+#include "waveform/overviewtype.h"
 #include "waveform/waveformwidgetfactory.h"
 
 #define PROPERTY_IMPL_GETTER(GROUP, KEY, TYPE, NAME, DEFAULT) \
@@ -331,7 +333,8 @@ void QmlConfigProxy::set_waveformOverviewNormalized(bool value) {
 PROPERTY_IMPL_GETTER(kWaveformGroup, kOverviewTypeKey, int, waveformOverviewType, 2);
 
 void QmlConfigProxy::set_waveformOverviewType(int value) {
-    const int sanitizedValue = std::clamp(value, 0, 2);
+    const int maxValue = QMetaEnum::fromType<mixxx::OverviewType>().keyCount() - 1;
+    const int sanitizedValue = std::clamp(value, 0, maxValue);
     setConfigValueAndNotify<int>(kWaveformGroup,
             kOverviewTypeKey,
             sanitizedValue,
