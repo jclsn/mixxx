@@ -10,6 +10,7 @@ enum class OverviewType {
     Filtered,
     HSV,
     RGB,
+    Spectrum,
 };
 Q_ENUM_NS(OverviewType);
 

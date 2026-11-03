@@ -1,10 +1,12 @@
 #include "waveformoverviewrenderer.h"
 
 #include <QPainter>
+#include <QVector3D>
 
 #include "util/math.h"
 #include "util/timer.h"
 #include "waveform/renderers/waveformsignalcolors.h"
+#include "waveform/renderers/waveformspectrumcolor.h"
 
 namespace waveformOverviewRenderer {
 
@@ -23,7 +25,13 @@ QImage render(ConstWaveformPointer pWaveform,
     QPainter painter(&image);
     painter.translate(0.0, static_cast<double>(image.height()) / 2.0);
 
-    if (type == mixxx::OverviewType::HSV) {
+    if (type == mixxx::OverviewType::Spectrum) {
+        drawWaveformPartSpectrum(&painter,
+                pWaveform,
+                nullptr,
+                dataSize,
+                mono);
+    } else if (type == mixxx::OverviewType::HSV) {
         drawWaveformPartHSV(&painter,
                 pWaveform,
                 nullptr,
@@ -323,6 +331,71 @@ void drawWaveformPartHSV(
     if (start) {
         *start = end;
     }
+}
+
+void drawWaveformPartSpectrum(
+        QPainter* pPainter,
+        ConstWaveformPointer pWaveform,
+        int* start,
+        int end,
+        bool mono) {
+    ScopedTimer t(QStringLiteral("waveformOverviewRenderer::drawNextPixmapPartSpectrum"));
+    int startVal = 0;
+    if (start) {
+        startVal = *start;
+    }
+
+    if (mono) {
+        // Mono means we're going to paint from bottom to top with l+r.
+        const qreal dy = pPainter->deviceTransform().dy();
+        pPainter->resetTransform();
+        // shift y0 to bottom
+        pPainter->translate(0, 2 * dy);
+        // flip y-axis
+        pPainter->scale(1, -1);
+    }
+
+    for (int i = startVal; i < end; i += 2) {
+        const int x = i / 2;
+        const int allLeft = pWaveform->getAll(i);
+        const int allRight = pWaveform->getAll(i + 1);
+        if (!allLeft && !allRight) {
+            continue;
+        }
+
+        const float spectralPosition = waveformSpectrumColor::spectralPosition(
+                static_cast<float>(pWaveform->getLow(i) + pWaveform->getLow(i + 1)),
+                static_cast<float>(pWaveform->getMid(i) + pWaveform->getMid(i + 1)),
+                static_cast<float>(pWaveform->getHigh(i) + pWaveform->getHigh(i + 1)));
+        const float amplitude = static_cast<float>(std::max(allLeft, allRight)) / 255.f;
+        const QVector3D color = waveformSpectrumColor::color(spectralPosition) *
+                waveformSpectrumColor::brightness(amplitude);
+
+        if (mono) {
+            drawSpectrumColumn(pPainter, x, 0, allLeft + allRight, color);
+        } else {
+            drawSpectrumColumn(pPainter, x, 0, -allLeft, color);
+            drawSpectrumColumn(pPainter, x, 0, allRight, color);
+        }
+    }
+
+    if (start) {
+        *start = end;
+    }
+}
+
+void drawSpectrumColumn(QPainter* pPainter, qreal x, qreal y0, qreal y1, const QVector3D& color) {
+    // Drawing a gradient per column is too expensive for the overview, so
+    // approximate the glow of the scrolling waveform with two segments.
+    constexpr qreal kCoreRatio = 0.6;
+    constexpr float kOuterAlpha = (1.0f + waveformSpectrumColor::kEdgeAlpha) / 2.0f;
+
+    const qreal yCore = y0 + (y1 - y0) * kCoreRatio;
+
+    pPainter->setPen(waveformSpectrumColor::toQColor(color, kOuterAlpha));
+    pPainter->drawLine(QPointF(x, yCore), QPointF(x, y1));
+    pPainter->setPen(waveformSpectrumColor::toQColor(waveformSpectrumColor::coreColor(color)));
+    pPainter->drawLine(QPointF(x, y0), QPointF(x, yCore));
 }
 
 } // namespace waveformOverviewRenderer

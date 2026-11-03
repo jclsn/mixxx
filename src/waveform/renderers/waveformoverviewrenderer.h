@@ -1,11 +1,13 @@
 #pragma once
 
 #include <QColor>
+#include <QtGlobal>
 
 #include "waveform/overviewtype.h"
 #include "waveform/waveform.h"
 
 class QPainter;
+class QVector3D;
 class WaveformSignalColors;
 
 namespace waveformOverviewRenderer {
@@ -41,4 +43,14 @@ void drawWaveformPartHSV(
         int end,
         const WaveformSignalColors& signalColors,
         bool mono = false);
+void drawWaveformPartSpectrum(
+        QPainter* pPainter,
+        ConstWaveformPointer pWaveform,
+        int* start,
+        int end,
+        bool mono = false);
+
+/// Draws a single Spectrum overview column from y0 (the axis) to y1, with a
+/// light core near the axis and a translucent outer part.
+void drawSpectrumColumn(QPainter* pPainter, qreal x, qreal y0, qreal y1, const QVector3D& color);
 } // namespace waveformOverviewRenderer
