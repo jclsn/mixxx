@@ -32,7 +32,7 @@ Category {
             return "Unknown";
         }
     }
-    readonly property list<int> waveformTypes: [Mixxx.WaveformDisplay.Type.Simple, Mixxx.WaveformDisplay.Type.Filtered, Mixxx.WaveformDisplay.Type.HSV, Mixxx.WaveformDisplay.Type.RGB, Mixxx.WaveformDisplay.Type.Stacked]
+    readonly property list<int> waveformTypes: [Mixxx.WaveformDisplay.Type.Simple, Mixxx.WaveformDisplay.Type.Filtered, Mixxx.WaveformDisplay.Type.HSV, Mixxx.WaveformDisplay.Type.RGB, Mixxx.WaveformDisplay.Type.Stacked, Mixxx.WaveformDisplay.Type.Spectrum]
 
     function load() {
         overviewTypeInput.currentIndex = Math.max(0, Math.min(2, Mixxx.Config.waveformOverviewType));
@@ -113,7 +113,7 @@ Category {
         Mixxx.Config.waveformZoomSynchronization = zoomSynchronizationInput.selected === "on";
         Mixxx.Config.waveformFrameRate = frameRateInput.value;
         var options = 0;
-        if (waveformTypeInput.currentIndex === 3 && splitStereoSignalInput.selected === "on")
+        if (splitStereoSignalInput.enabled && splitStereoSignalInput.selected === "on")
             options |= Mixxx.WaveformDisplay.Option.SplitStereoSignal;
         if (highDetailInput.selected === "on")
             options |= Mixxx.WaveformDisplay.Option.HighDetail;
@@ -247,7 +247,7 @@ Category {
                     id: waveformTypeInput
 
                     Layout.preferredWidth: 180
-                    model: ["Simple", "Filtered", "HSV", "RGB", "Stacked"]
+                    model: ["Simple", "Filtered", "HSV", "RGB", "Stacked", "Spectrum"]
 
                     onCurrentIndexChanged: root.markDirty()
                 }
@@ -255,7 +255,7 @@ Category {
             Text {
                 Layout.fillWidth: true
                 color: Theme.midGray
-                text: "Simple, Filtered, HSV, RGB and Stacked are supported by the QML renderer."
+                text: "Simple, Filtered, HSV, RGB, Stacked and Spectrum are supported by the QML renderer."
                 wrapMode: Text.WordWrap
             }
             RowLayout {
@@ -395,7 +395,7 @@ Category {
                 RatioChoice {
                     id: splitStereoSignalInput
 
-                    enabled: waveformTypeInput.currentIndex === 3
+                    enabled: [Mixxx.WaveformDisplay.Type.RGB, Mixxx.WaveformDisplay.Type.Spectrum].includes(root.waveformTypes[waveformTypeInput.currentIndex])
                     options: ["on", "off"]
 
                     onSelectedChanged: root.markDirty()
@@ -404,7 +404,7 @@ Category {
             Text {
                 Layout.fillWidth: true
                 color: Theme.midGray
-                text: "Split stereo signal is used by the RGB renderer."
+                text: "Split stereo signal is used by the RGB and Spectrum renderers."
                 wrapMode: Text.WordWrap
             }
             RowLayout {

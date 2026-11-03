@@ -324,6 +324,92 @@ class QmlWaveformRendererHSV
     WaveformRendererSignalBaseOptions m_supportedOption;
 };
 
+/// Spectrum colored waveform. The colors are derived from the spectral balance
+/// of the signal, so unlike the other signal renderers it has no color
+/// properties.
+class QmlWaveformRendererSpectrum
+        : public QmlWaveformRendererFactory {
+    Q_OBJECT
+    Q_PROPERTY(bool ignoreStem MEMBER m_ignoreStem NOTIFY ignoreStemChanged)
+    Q_PROPERTY(QColor axesColor MEMBER m_axesColor NOTIFY axesColorChanged REQUIRED)
+    Q_PROPERTY(double gainAll READ gainAll WRITE setGainAll NOTIFY gainAllChanged REQUIRED)
+    Q_PROPERTY(double gainLow READ gainLow WRITE setGainLow NOTIFY gainLowChanged REQUIRED)
+    Q_PROPERTY(double gainMid READ gainMid WRITE setGainMid NOTIFY gainMidChanged REQUIRED)
+    Q_PROPERTY(double gainHigh READ gainHigh WRITE setGainHigh NOTIFY gainHighChanged REQUIRED)
+    Q_PROPERTY(WaveformRendererSignalBaseOptions supportedOptions MEMBER
+                    m_supportedOption CONSTANT)
+    QML_NAMED_ELEMENT(WaveformRendererSpectrum)
+
+  public:
+    QmlWaveformRendererSpectrum()
+            : m_supportedOption(allshader::WaveformWidget::supportedOptions(
+                      WaveformWidgetType::Spectrum, USE_OPENGLES)) {
+    }
+    Renderer create(WaveformWidgetRenderer* waveformWidget,
+            mixxx::qml::WaveformRendererSignalBaseOptions options)
+            const override;
+  signals:
+    void axesColorChanged(const QColor&);
+    void ignoreStemChanged(bool);
+    void gainAllChanged(double);
+    void gainLowChanged(double);
+    void gainMidChanged(double);
+    void gainHighChanged(double);
+
+  private:
+    double gainAll() const {
+        return m_gainAll;
+    }
+    double gainLow() const {
+        return m_gainLow;
+    }
+    double gainMid() const {
+        return m_gainMid;
+    }
+    double gainHigh() const {
+        return m_gainHigh;
+    }
+    void setGainAll(double value) {
+        if (m_gainAll == value) {
+            return;
+        }
+        m_gainAll = value;
+        emit gainAllChanged(value);
+    }
+    void setGainLow(double value) {
+        if (m_gainLow == value) {
+            return;
+        }
+        m_gainLow = value;
+        emit gainLowChanged(value);
+    }
+    void setGainMid(double value) {
+        if (m_gainMid == value) {
+            return;
+        }
+        m_gainMid = value;
+        emit gainMidChanged(value);
+    }
+    void setGainHigh(double value) {
+        if (m_gainHigh == value) {
+            return;
+        }
+        m_gainHigh = value;
+        emit gainHighChanged(value);
+    }
+
+    QColor m_axesColor;
+
+    double m_gainAll{1.0};
+    double m_gainLow{1.0};
+    double m_gainMid{1.0};
+    double m_gainHigh{1.0};
+
+    bool m_ignoreStem{false};
+
+    WaveformRendererSignalBaseOptions m_supportedOption;
+};
+
 class QmlWaveformRendererSimple
         : public QmlWaveformRendererFactory {
     Q_OBJECT

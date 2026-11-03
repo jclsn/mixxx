@@ -4049,6 +4049,7 @@ if(QML)
       src/waveform/renderers/allshader/waveformrendererfiltered.cpp
       src/waveform/renderers/allshader/waveformrendererhsv.cpp
       src/waveform/renderers/allshader/waveformrenderersimple.cpp
+      src/waveform/renderers/allshader/waveformrendererspectrum.cpp
       # The following sources need to be in this target to get QML_ELEMENT properly interpreted
       src/control/controlmodel.cpp
       src/control/controlsortfiltermodel.cpp
