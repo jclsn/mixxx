@@ -595,6 +595,8 @@ TEST_F(EngineBufferTest, RatePermTest) {
 // In relative vinyl mode the deck position is the integral of
 // vinylcontrol_rate. Drive the rate per callback like VinylControlXwax does
 // and check that the engine moves exactly by sum(rate * buffer duration).
+// The remaining error of up to half a frame per direction change comes from
+// rounding the zero crossing of the rate ramp to whole frames.
 class EngineBufferVinylRateTest : public SignalPathTest {
   protected:
     void SetUp() override {
@@ -700,7 +702,7 @@ TEST_F(EngineBufferVinylRateTest, ScratchStrokes) {
         }
     }
     ramp(&rates, 0.0, 1.0, 4);
-    measure(rates);
+    EXPECT_NEAR(0.0, measure(rates), 2.0);
 }
 
 TEST_F(EngineBufferVinylRateTest, BackspinWithStop) {
@@ -712,7 +714,7 @@ TEST_F(EngineBufferVinylRateTest, BackspinWithStop) {
     ramp(&rates, 0.0, 2.0, 8);
     rates.insert(rates.end(), 200, 2.0);
     ramp(&rates, 2.0, 1.0, 4);
-    measure(rates);
+    EXPECT_NEAR(0.0, measure(rates), 2.0);
 }
 
 TEST_F(EngineBufferVinylRateTest, StopAndRestart) {
@@ -723,5 +725,5 @@ TEST_F(EngineBufferVinylRateTest, StopAndRestart) {
         ramp(&rates, 0.0, 1.0, 2);
         rates.insert(rates.end(), 10, 1.0);
     }
-    measure(rates);
+    EXPECT_NEAR(0.0, measure(rates), 2.0);
 }

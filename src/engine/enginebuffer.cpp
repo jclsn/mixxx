@@ -1001,11 +1001,20 @@ void EngineBuffer::processTrackLocked(
         }
     }
 
+    // With vinyl control the deck position is the integral of the vinyl
+    // rate, which becomes exactly zero whenever the record stops. The linear
+    // scaler supports ramping down to and up from zero, so treat a stop like
+    // any other rate change. Cutting the transport instead skips the ramp
+    // down and starts the next movement without a ramp up, which moves the
+    // deck by a different distance than the record.
+    const bool rampVinylThroughZero = m_pVinylControlControl &&
+            m_pVinylControlControl->isEnabled() && m_pScale == m_pScaleVinyl;
+
     if (speed != 0.0 || is_scratching) {
         // Do not switch scaler when we have no transport, except when we start scratching.
         enableIndependentPitchTempoScaling(useIndependentPitchAndTempoScaling,
                 bufferSize);
-    } else if (m_speed_old != 0) {
+    } else if (m_speed_old != 0 && !rampVinylThroughZero) {
         // we are stopping, collect samples for fade out
         readToCrossfadeBuffer(bufferSize);
         // Clear the scaler information
@@ -1113,10 +1122,11 @@ void EngineBuffer::processTrackLocked(
         if (atEnd && !backwards) {
             // do not play past end
             bCurBufferPaused = true;
-        } else if (rate == 0 && !is_scratching) {
+        } else if (rate == 0 && !is_scratching &&
+                !(rampVinylThroughZero && m_rate_old != 0)) {
             // do not process samples if have no transport
             // the linear scaler supports ramping down to 0
-            // this is used for pause by scratching only
+            // this is used for pause by scratching and vinyl control only
             bCurBufferPaused = true;
         }
     } else {
