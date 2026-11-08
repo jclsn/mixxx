@@ -15,10 +15,6 @@ namespace {
 
 mixxx::Logger kLogger("AnalyzerWaveform");
 
-constexpr double kLowMidFreqHz = 600.0;
-
-constexpr double kMidHighFreqHz = 4000.0;
-
 } // namespace
 
 AnalyzerWaveform::AnalyzerWaveform(

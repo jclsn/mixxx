@@ -140,6 +140,10 @@ struct WaveformStride {
 
 class AnalyzerWaveform : public Analyzer {
   public:
+    /// Crossover frequencies between the low, mid and high band
+    static constexpr double kLowMidFreqHz = 600.0;
+    static constexpr double kMidHighFreqHz = 4000.0;
+
     AnalyzerWaveform(
             UserSettingsPointer pConfig,
             const QSqlDatabase& dbConnection);
