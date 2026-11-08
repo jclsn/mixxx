@@ -1741,6 +1741,7 @@ add_library(
   src/waveform/visualsmanager.cpp
   src/waveform/vsyncthread.cpp
   src/waveform/waveform.cpp
+  src/waveform/waveformdetail.cpp
   src/waveform/waveformfactory.cpp
   src/waveform/waveformmarklabel.cpp
   src/waveform/waveformwidgetfactory.cpp
@@ -2985,6 +2986,7 @@ if(BUILD_TESTING)
     src/test/trackreftest.cpp
     src/test/trackupdate_test.cpp
     src/test/uuid_test.cpp
+    src/test/waveformdetailtest.cpp
     src/test/wbatterytest.cpp
     src/test/wpushbutton_test.cpp
     src/test/wwidgetstack_test.cpp
