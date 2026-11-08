@@ -4,6 +4,7 @@
 
 #include <QOpenGLFramebufferObject>
 #include <QOpenGLShaderProgram>
+#include <algorithm>
 
 #include "moc_waveformrenderertextured.cpp"
 #include "track/track.h"
@@ -39,6 +40,7 @@ WaveformRendererTextured::WaveformRendererTextured(
         : WaveformRendererSignalBase(waveformWidget, options),
           m_unitQuadListId(-1),
           m_textureId(0),
+          m_highResolutionTextureId(0),
           m_textureRenderedWaveformCompletion(0),
           m_isSlipRenderer(type == ::WaveformRendererAbstract::Slip),
           m_options(options),
@@ -50,6 +52,9 @@ WaveformRendererTextured::WaveformRendererTextured(
 WaveformRendererTextured::~WaveformRendererTextured() {
     if (m_textureId) {
         glDeleteTextures(1, &m_textureId);
+    }
+    if (m_highResolutionTextureId) {
+        glDeleteTextures(1, &m_highResolutionTextureId);
     }
 
     if (m_frameShaderProgram) {
@@ -169,6 +174,58 @@ bool WaveformRendererTextured::loadTexture() {
     glDisable(GL_TEXTURE_2D);
 
     return true;
+}
+
+void WaveformRendererTextured::loadHighResolutionTexture(
+        ConstHighResolutionWaveformPointer pWaveform) {
+    glEnable(GL_TEXTURE_2D);
+
+    if (m_highResolutionTextureId == 0) {
+        glGenTextures(1, &m_highResolutionTextureId);
+    }
+    glBindTexture(GL_TEXTURE_2D, m_highResolutionTextureId);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    // The shaders expect a square texture, see loadTexture()
+    const int textureStride = pWaveform->getTextureStride();
+    m_data.assign(static_cast<std::size_t>(textureStride) * textureStride, {});
+    std::copy(pWaveform->data(), pWaveform->data() + pWaveform->getDataSize(), m_data.begin());
+    glTexImage2D(GL_TEXTURE_2D,
+            0,
+            GL_RGBA,
+            textureStride,
+            textureStride,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            m_data.data());
+    const int error = glGetError();
+    VERIFY_OR_DEBUG_ASSERT(!error) {
+        qWarning() << "WaveformRendererTextured::loadHighResolutionTexture - "
+                      "glTexImage2D error"
+                   << error;
+    }
+
+    glDisable(GL_TEXTURE_2D);
+    // Keeping a reference makes sure the comparison in paintGL() can not
+    // mistake a new waveform for this one at a reused address
+    m_pHighResolutionTextureWaveform = std::move(pWaveform);
+}
+
+ConstHighResolutionWaveformPointer WaveformRendererTextured::highResolutionWaveform(
+        const TrackPointer& pTrack) {
+    const QString location = pTrack->getLocation();
+    if (location != m_highResolutionLocation) {
+        m_highResolutionLocation = location;
+        m_pHighResolutionWaveform.reset();
+    }
+
+    if (!m_pHighResolutionWaveform) {
+        m_pHighResolutionWaveform = highResolutionWaveformCache::request(pTrack);
+    }
+
+    return m_pHighResolutionWaveform;
 }
 
 void WaveformRendererTextured::createGeometry() {
@@ -330,16 +387,37 @@ void WaveformRendererTextured::paintGL() {
         m_textureRenderedWaveformCompletion = currentCompletion;
     }
 
+    // When zoomed in so far that a visual frame of the analysis waveform spans
+    // multiple pixels, use the waveform with the higher resolution instead. It
+    // is only computed then, so lower-end machines are not affected otherwise.
+    double visualRatio = audioVisualRatio;
+    int textureSize = pWaveform->getTextureSize();
+    int textureStride = pWaveform->getTextureStride();
+    GLuint textureId = m_textureId;
+    if (m_waveformRenderer->getVisualSamplePerPixel() < 1.0) {
+        ConstHighResolutionWaveformPointer pHighResolution = highResolutionWaveform(pTrack);
+        if (pHighResolution) {
+            if (m_pHighResolutionTextureWaveform != pHighResolution) {
+                loadHighResolutionTexture(pHighResolution);
+            }
+            visualRatio = pHighResolution->getAudioVisualRatio();
+            dataSize = pHighResolution->getDataSize();
+            textureStride = pHighResolution->getTextureStride();
+            textureSize = textureStride * textureStride;
+            textureId = m_highResolutionTextureId;
+        }
+    }
+
     // Per-band gain from the EQ knobs.
     float lowGain(1.0), midGain(1.0), highGain(1.0), allGain(1.0);
     getGains(&allGain, &lowGain, &midGain, &highGain);
 
     const auto firstVisualIndex = static_cast<GLfloat>(
             m_waveformRenderer->getFirstDisplayedPosition(positionType) * trackSamples /
-            audioVisualRatio / 2.0);
+            visualRatio / 2.0);
     const auto lastVisualIndex = static_cast<GLfloat>(
             m_waveformRenderer->getLastDisplayedPosition(positionType) *
-            trackSamples / audioVisualRatio / 2.0);
+            trackSamples / visualRatio / 2.0);
 
     // const int firstIndex = int(firstVisualIndex+0.5);
     // firstVisualIndex = firstIndex - firstIndex%2;
@@ -372,8 +450,8 @@ void WaveformRendererTextured::paintGL() {
         m_frameShaderProgram->setUniformValue("framebufferSize",
                 QVector2D(m_framebuffer->width(), m_framebuffer->height()));
         m_frameShaderProgram->setUniformValue("waveformLength", dataSize);
-        m_frameShaderProgram->setUniformValue("textureSize", pWaveform->getTextureSize());
-        m_frameShaderProgram->setUniformValue("textureStride", pWaveform->getTextureStride());
+        m_frameShaderProgram->setUniformValue("textureSize", textureSize);
+        m_frameShaderProgram->setUniformValue("textureStride", textureStride);
 
         m_frameShaderProgram->setUniformValue("firstVisualIndex", firstVisualIndex);
         m_frameShaderProgram->setUniformValue("lastVisualIndex", lastVisualIndex);
@@ -446,7 +524,7 @@ void WaveformRendererTextured::paintGL() {
         }
 
         glEnable(GL_TEXTURE_2D);
-        glBindTexture(GL_TEXTURE_2D, m_textureId);
+        glBindTexture(GL_TEXTURE_2D, textureId);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 

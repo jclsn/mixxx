@@ -1713,6 +1713,7 @@ add_library(
   src/util/workerthreadscheduler.cpp
   src/util/xml.cpp
   src/waveform/guitick.cpp
+  src/waveform/highresolutionwaveform.cpp
   src/waveform/overviewtype.cpp
   src/waveform/renderers/glwaveformrenderbackground.cpp
   src/waveform/renderers/glvsynctestrenderer.cpp
@@ -2927,6 +2928,7 @@ if(BUILD_TESTING)
     src/test/fileinfo_test.cpp
     src/test/frametest.cpp
     src/test/globaltrackcache_test.cpp
+    src/test/highresolutionwaveformtest.cpp
     src/test/hotcuecontrol_test.cpp
     src/test/hotcueorderbyposition_test.cpp
     src/test/imageutils_test.cpp

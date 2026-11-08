@@ -2,8 +2,11 @@
 
 #ifndef QT_OPENGL_ES_2
 
+#include <QString>
+
 #include "rendergraph/openglnode.h"
 #include "track/track_decl.h"
+#include "waveform/highresolutionwaveform.h"
 #include "waveform/renderers/allshader/waveformrenderersignalbase.h"
 #include "waveform/waveform.h"
 #include "waveform/widgets/waveformwidgettype.h"
@@ -55,12 +58,22 @@ class allshader::WaveformRendererTextured final : public allshader::WaveformRend
     static QString fragShaderForType(WaveformWidgetType::Type t);
     bool loadShaders();
     bool loadTexture();
+    void loadHighResolutionTexture(ConstHighResolutionWaveformPointer pWaveform);
+    ConstHighResolutionWaveformPointer highResolutionWaveform(const TrackPointer& pTrack);
 
     void createGeometry();
     void createFrameBuffers();
 
     GLint m_unitQuadListId;
     GLuint m_textureId;
+
+    // When zoomed in so far that a visual frame of the analysis waveform spans
+    // multiple pixels, a waveform with a higher resolution is used instead
+    GLuint m_highResolutionTextureId;
+    QString m_highResolutionLocation;
+    ConstHighResolutionWaveformPointer m_pHighResolutionWaveform;
+    // The waveform currently uploaded to m_highResolutionTextureId
+    ConstHighResolutionWaveformPointer m_pHighResolutionTextureWaveform;
 
     TrackPointer m_loadedTrack;
     int m_textureRenderedWaveformCompletion;
