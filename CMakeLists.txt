@@ -1737,6 +1737,7 @@ add_library(
   src/waveform/renderers/waveformsignalcolors.cpp
   src/waveform/renderers/waveformwidgetrenderer.cpp
   src/waveform/sharedglcontext.cpp
+  src/waveform/trackdecoder.cpp
   src/waveform/visualplayposition.cpp
   src/waveform/visualsmanager.cpp
   src/waveform/vsyncthread.cpp
