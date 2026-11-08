@@ -127,8 +127,9 @@ DlgPrefWaveform::DlgPrefWaveform(
     // Sort the combobox items alphabetically
     waveformTypeComboBox->model()->sort(0);
 
-    // Populate zoom options.
-    for (int i = static_cast<int>(WaveformWidgetRenderer::s_waveformMinZoom);
+    // Populate zoom options. The default zoom is limited to whole steps, the
+    // zoom levels below 1 can only be reached interactively.
+    for (int i = 1;
             i <= static_cast<int>(WaveformWidgetRenderer::s_waveformMaxZoom);
             i++) {
         defaultZoomComboBox->addItem(QString::number(100 / static_cast<double>(i), 'f', 1) + " %");

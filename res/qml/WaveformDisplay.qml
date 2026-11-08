@@ -21,6 +21,8 @@ Item {
     // the legacy preferences dialog can recreate that stack explicitly.
     property int renderedWaveformType: -1
     readonly property string zoomGroup: Mixxx.Config.waveformZoomSynchronization ? "[Channel1]" : group
+    // Same as WaveformWidgetRenderer::s_waveformMinZoom
+    readonly property real minZoom: 0.05
 
     Connections {
         target: Mixxx.Config
@@ -340,10 +342,12 @@ Item {
             mouseStatus = WaveformDisplay.MouseStatus.Normal;
         }
         onWheel: mouse => {
-            if (mouse.angleDelta.y < 0 && zoomControl.value > 1) {
-                zoomControl.value -= 1;
+            // Below 1 the zoom is halved / doubled, so the zoom levels down to
+            // the minimum are reachable in a few steps
+            if (mouse.angleDelta.y < 0 && zoomControl.value > root.minZoom) {
+                zoomControl.value = zoomControl.value > 1 ? zoomControl.value - 1 : Math.max(zoomControl.value / 2, root.minZoom);
             } else if (mouse.angleDelta.y > 0 && zoomControl.value < 10.0) {
-                zoomControl.value += 1;
+                zoomControl.value = zoomControl.value < 1 ? Math.min(zoomControl.value * 2, 1) : zoomControl.value + 1;
             }
         }
     }

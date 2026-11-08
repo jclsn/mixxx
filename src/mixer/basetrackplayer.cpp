@@ -2,6 +2,7 @@
 
 #include <QMessageBox>
 #include <QMetaMethod>
+#include <algorithm>
 #include <memory>
 
 #include "control/controlencoder.h"
@@ -1007,7 +1008,11 @@ void BaseTrackPlayerImpl::slotWaveformZoomUp(double pressed) {
         return;
     }
 
-    m_pWaveformZoom->set(m_pWaveformZoom->get() + 1.0);
+    // Below 1 the zoom is doubled instead, so the zoom levels down to the
+    // minimum are reachable in a few steps
+    const double zoom = m_pWaveformZoom->get();
+    const double newZoom = zoom < 1.0 ? std::min(zoom * 2.0, 1.0) : zoom + 1.0;
+    m_pWaveformZoom->set(newZoom);
 }
 
 void BaseTrackPlayerImpl::slotWaveformZoomDown(double pressed) {
@@ -1015,7 +1020,10 @@ void BaseTrackPlayerImpl::slotWaveformZoomDown(double pressed) {
         return;
     }
 
-    m_pWaveformZoom->set(m_pWaveformZoom->get() - 1.0);
+    // Below 1 the zoom is halved instead, see slotWaveformZoomUp()
+    const double zoom = m_pWaveformZoom->get();
+    const double newZoom = zoom > 1.0 ? zoom - 1.0 : zoom / 2.0;
+    m_pWaveformZoom->set(std::max(newZoom, WaveformWidgetRenderer::s_waveformMinZoom));
 }
 
 void BaseTrackPlayerImpl::slotWaveformZoomSetDefault(double pressed) {
