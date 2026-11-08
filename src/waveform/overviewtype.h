@@ -11,6 +11,7 @@ enum class OverviewType {
     HSV,
     RGB,
     Spectrum,
+    Envelope,
 };
 Q_ENUM_NS(OverviewType);
 

@@ -87,6 +87,8 @@ DlgPrefWaveform::DlgPrefWaveform(
     waveformOverviewComboBox->addItem(tr("RGB"), QVariant::fromValue(OverviewType::RGB));
     waveformOverviewComboBox->addItem(
             tr("Spectrum"), QVariant::fromValue(OverviewType::Spectrum));
+    waveformOverviewComboBox->addItem(
+            tr("Envelope"), QVariant::fromValue(OverviewType::Envelope));
     if (!ControlObject::exists(kOverviewTypeCfgKey)) {
         m_pTypeControl = std::make_unique<ControlPushButton>(kOverviewTypeCfgKey);
         m_pTypeControl->setStates(QMetaEnum::fromType<OverviewType>().keyCount());

@@ -25,7 +25,13 @@ QImage render(ConstWaveformPointer pWaveform,
     QPainter painter(&image);
     painter.translate(0.0, static_cast<double>(image.height()) / 2.0);
 
-    if (type == mixxx::OverviewType::Spectrum) {
+    if (type == mixxx::OverviewType::Envelope) {
+        drawWaveformPartEnvelope(&painter,
+                pWaveform,
+                nullptr,
+                dataSize,
+                mono);
+    } else if (type == mixxx::OverviewType::Spectrum) {
         drawWaveformPartSpectrum(&painter,
                 pWaveform,
                 nullptr,
@@ -333,13 +339,17 @@ void drawWaveformPartHSV(
     }
 }
 
-void drawWaveformPartSpectrum(
+namespace {
+
+/// Draws the Spectrum overview, or with envelope = true the Envelope overview
+/// with solid columns in the full spectrum color.
+void drawSpectrumColoredPart(
         QPainter* pPainter,
         ConstWaveformPointer pWaveform,
         int* start,
         int end,
-        bool mono) {
-    ScopedTimer t(QStringLiteral("waveformOverviewRenderer::drawNextPixmapPartSpectrum"));
+        bool mono,
+        bool envelope) {
     int startVal = 0;
     if (start) {
         startVal = *start;
@@ -368,20 +378,45 @@ void drawWaveformPartSpectrum(
                 static_cast<float>(pWaveform->getMid(i) + pWaveform->getMid(i + 1)),
                 static_cast<float>(pWaveform->getHigh(i) + pWaveform->getHigh(i + 1)));
         const float amplitude = static_cast<float>(std::max(allLeft, allRight)) / 255.f;
-        const QVector3D color = waveformSpectrumColor::color(spectralPosition) *
-                waveformSpectrumColor::brightness(amplitude);
+        const QVector3D color = envelope
+                ? waveformSpectrumColor::color(spectralPosition)
+                : waveformSpectrumColor::color(spectralPosition) *
+                        waveformSpectrumColor::brightness(amplitude);
+        const auto drawColumn = envelope ? drawEnvelopeColumn : drawSpectrumColumn;
 
         if (mono) {
-            drawSpectrumColumn(pPainter, x, 0, allLeft + allRight, color);
+            drawColumn(pPainter, x, 0, allLeft + allRight, color);
         } else {
-            drawSpectrumColumn(pPainter, x, 0, -allLeft, color);
-            drawSpectrumColumn(pPainter, x, 0, allRight, color);
+            drawColumn(pPainter, x, 0, -allLeft, color);
+            drawColumn(pPainter, x, 0, allRight, color);
         }
     }
 
     if (start) {
         *start = end;
     }
+}
+
+} // namespace
+
+void drawWaveformPartSpectrum(
+        QPainter* pPainter,
+        ConstWaveformPointer pWaveform,
+        int* start,
+        int end,
+        bool mono) {
+    ScopedTimer t(QStringLiteral("waveformOverviewRenderer::drawNextPixmapPartSpectrum"));
+    drawSpectrumColoredPart(pPainter, pWaveform, start, end, mono, false);
+}
+
+void drawWaveformPartEnvelope(
+        QPainter* pPainter,
+        ConstWaveformPointer pWaveform,
+        int* start,
+        int end,
+        bool mono) {
+    ScopedTimer t(QStringLiteral("waveformOverviewRenderer::drawNextPixmapPartEnvelope"));
+    drawSpectrumColoredPart(pPainter, pWaveform, start, end, mono, true);
 }
 
 void drawSpectrumColumn(QPainter* pPainter, qreal x, qreal y0, qreal y1, const QVector3D& color) {
@@ -396,6 +431,11 @@ void drawSpectrumColumn(QPainter* pPainter, qreal x, qreal y0, qreal y1, const Q
     pPainter->drawLine(QPointF(x, yCore), QPointF(x, y1));
     pPainter->setPen(waveformSpectrumColor::toQColor(waveformSpectrumColor::coreColor(color)));
     pPainter->drawLine(QPointF(x, y0), QPointF(x, yCore));
+}
+
+void drawEnvelopeColumn(QPainter* pPainter, qreal x, qreal y0, qreal y1, const QVector3D& color) {
+    pPainter->setPen(waveformSpectrumColor::toQColor(color));
+    pPainter->drawLine(QPointF(x, y0), QPointF(x, y1));
 }
 
 } // namespace waveformOverviewRenderer
