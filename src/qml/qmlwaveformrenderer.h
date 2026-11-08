@@ -326,10 +326,12 @@ class QmlWaveformRendererHSV
 
 /// Spectrum colored waveform. The colors are derived from the spectral balance
 /// of the signal, so unlike the other signal renderers it has no color
-/// properties.
+/// properties. With `envelope`, the Envelope waveform is drawn, which shows the
+/// actual wave shape.
 class QmlWaveformRendererSpectrum
         : public QmlWaveformRendererFactory {
     Q_OBJECT
+    Q_PROPERTY(bool envelope MEMBER m_envelope FINAL)
     Q_PROPERTY(bool ignoreStem MEMBER m_ignoreStem NOTIFY ignoreStemChanged)
     Q_PROPERTY(QColor axesColor MEMBER m_axesColor NOTIFY axesColorChanged REQUIRED)
     Q_PROPERTY(double gainAll READ gainAll WRITE setGainAll NOTIFY gainAllChanged REQUIRED)
@@ -406,6 +408,7 @@ class QmlWaveformRendererSpectrum
     double m_gainHigh{1.0};
 
     bool m_ignoreStem{false};
+    bool m_envelope{false};
 
     WaveformRendererSignalBaseOptions m_supportedOption;
 };

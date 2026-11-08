@@ -4045,6 +4045,7 @@ if(QML)
       src/waveform/renderers/allshader/waveformrenderbeat.cpp
       src/waveform/renderers/allshader/waveformrenderer.cpp
       src/waveform/renderers/allshader/waveformrendererendoftrack.cpp
+      src/waveform/renderers/allshader/waveformrendererenvelope.cpp
       src/waveform/renderers/allshader/waveformrendererpreroll.cpp
       src/waveform/renderers/allshader/waveformrendererrgb.cpp
       src/waveform/renderers/allshader/waveformrenderersignalbase.cpp

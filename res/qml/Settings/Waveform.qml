@@ -32,7 +32,7 @@ Category {
             return "Unknown";
         }
     }
-    readonly property list<int> waveformTypes: [Mixxx.WaveformDisplay.Type.Simple, Mixxx.WaveformDisplay.Type.Filtered, Mixxx.WaveformDisplay.Type.HSV, Mixxx.WaveformDisplay.Type.RGB, Mixxx.WaveformDisplay.Type.Stacked, Mixxx.WaveformDisplay.Type.Spectrum]
+    readonly property list<int> waveformTypes: [Mixxx.WaveformDisplay.Type.Simple, Mixxx.WaveformDisplay.Type.Filtered, Mixxx.WaveformDisplay.Type.HSV, Mixxx.WaveformDisplay.Type.RGB, Mixxx.WaveformDisplay.Type.Stacked, Mixxx.WaveformDisplay.Type.Spectrum, Mixxx.WaveformDisplay.Type.Envelope]
 
     function load() {
         overviewTypeInput.currentIndex = Math.max(0, Math.min(3, Mixxx.Config.waveformOverviewType));
@@ -247,7 +247,7 @@ Category {
                     id: waveformTypeInput
 
                     Layout.preferredWidth: 180
-                    model: ["Simple", "Filtered", "HSV", "RGB", "Stacked", "Spectrum"]
+                    model: ["Simple", "Filtered", "HSV", "RGB", "Stacked", "Spectrum", "Envelope"]
 
                     onCurrentIndexChanged: root.markDirty()
                 }
@@ -255,7 +255,7 @@ Category {
             Text {
                 Layout.fillWidth: true
                 color: Theme.midGray
-                text: "Simple, Filtered, HSV, RGB, Stacked and Spectrum are supported by the QML renderer."
+                text: "Simple, Filtered, HSV, RGB, Stacked, Spectrum and Envelope are supported by the QML renderer."
                 wrapMode: Text.WordWrap
             }
             RowLayout {

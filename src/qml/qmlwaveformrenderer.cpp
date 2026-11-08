@@ -11,6 +11,7 @@
 #include "util/assert.h"
 #include "waveform/renderers/allshader/waveformrenderbeat.h"
 #include "waveform/renderers/allshader/waveformrendererendoftrack.h"
+#include "waveform/renderers/allshader/waveformrendererenvelope.h"
 #include "waveform/renderers/allshader/waveformrendererfiltered.h"
 #include "waveform/renderers/allshader/waveformrendererhsv.h"
 #include "waveform/renderers/allshader/waveformrendererpreroll.h"
@@ -244,8 +245,19 @@ QmlWaveformRendererFactory::Renderer QmlWaveformRendererHSV::create(
 QmlWaveformRendererFactory::Renderer QmlWaveformRendererSpectrum::create(
         WaveformWidgetRenderer* waveformWidget,
         mixxx::qml::WaveformRendererSignalBaseOptions options) const {
-    auto pRenderer = std::make_unique<allshader::WaveformRendererSpectrum>(
-            waveformWidget, options);
+    std::unique_ptr<rendergraph::BaseNode> pNode;
+    allshader::WaveformRendererSignalBase* pRenderer;
+    if (m_envelope) {
+        auto pEnvelope = std::make_unique<allshader::WaveformRendererEnvelope>(
+                waveformWidget, options);
+        pRenderer = pEnvelope.get();
+        pNode = std::move(pEnvelope);
+    } else {
+        auto pSpectrum = std::make_unique<allshader::WaveformRendererSpectrum>(
+                waveformWidget, options);
+        pRenderer = pSpectrum.get();
+        pNode = std::move(pSpectrum);
+    }
 
     pRenderer->setAxesColor(m_axesColor);
     pRenderer->setIgnoreStem(m_ignoreStem);
@@ -255,29 +267,29 @@ QmlWaveformRendererFactory::Renderer QmlWaveformRendererSpectrum::create(
     pRenderer->setHighVisualGain(m_gainHigh);
     connect(this,
             &QmlWaveformRendererSpectrum::gainAllChanged,
-            pRenderer.get(),
+            pRenderer,
             &allshader::WaveformRendererSignalBase::setAllChannelVisualGain);
     connect(this,
             &QmlWaveformRendererSpectrum::gainLowChanged,
-            pRenderer.get(),
+            pRenderer,
             &allshader::WaveformRendererSignalBase::setLowVisualGain);
     connect(this,
             &QmlWaveformRendererSpectrum::gainMidChanged,
-            pRenderer.get(),
+            pRenderer,
             &allshader::WaveformRendererSignalBase::setMidVisualGain);
     connect(this,
             &QmlWaveformRendererSpectrum::gainHighChanged,
-            pRenderer.get(),
+            pRenderer,
             &allshader::WaveformRendererSignalBase::setHighVisualGain);
     connect(this,
             &QmlWaveformRendererSpectrum::axesColorChanged,
-            pRenderer.get(),
+            pRenderer,
             &allshader::WaveformRendererSignalBase::setAxesColor);
     connect(this,
             &QmlWaveformRendererSpectrum::ignoreStemChanged,
-            pRenderer.get(),
+            pRenderer,
             &allshader::WaveformRendererSignalBase::setIgnoreStem);
-    return QmlWaveformRendererFactory::Renderer{pRenderer.get(), std::move(pRenderer)};
+    return QmlWaveformRendererFactory::Renderer{pRenderer, std::move(pNode)};
 }
 
 QmlWaveformRendererFactory::Renderer QmlWaveformRendererSimple::create(

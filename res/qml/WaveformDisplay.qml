@@ -15,7 +15,7 @@ Item {
 
     required property string group
     property bool splitStemTracks: false
-    readonly property int activeWaveformType: Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.Simple || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.Filtered || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.HSV || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.RGB || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.Stacked || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.Spectrum ? Mixxx.Config.waveformType : Mixxx.WaveformDisplay.Type.RGB
+    readonly property int activeWaveformType: Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.Simple || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.Filtered || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.HSV || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.RGB || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.Stacked || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.Spectrum || Mixxx.Config.waveformType === Mixxx.WaveformDisplay.Type.Envelope ? Mixxx.Config.waveformType : Mixxx.WaveformDisplay.Type.RGB
     // Renderer factories are created once by QmlWaveformDisplay. Keep track
     // of the type that was used for the scene-graph stack so a change from
     // the legacy preferences dialog can recreate that stack explicitly.
@@ -144,6 +144,15 @@ Item {
             gainHigh: Mixxx.Config.waveformVisualGainHigh
             gainLow: Mixxx.Config.waveformVisualGainLow
             gainMid: Mixxx.Config.waveformVisualGainMedium
+        }
+        Mixxx.WaveformRendererSpectrum {
+            axesColor: '#a1a1a1a1'
+            enabled: root.activeWaveformType === Mixxx.WaveformDisplay.Type.Envelope
+            gainAll: Mixxx.Config.waveformVisualGainAll
+            gainHigh: Mixxx.Config.waveformVisualGainHigh
+            gainLow: Mixxx.Config.waveformVisualGainLow
+            gainMid: Mixxx.Config.waveformVisualGainMedium
+            envelope: true
         }
         Mixxx.WaveformRendererRGB {
             axesColor: '#a1a1a1a1'
