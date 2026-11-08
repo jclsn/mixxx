@@ -628,6 +628,7 @@ bool WaveformWidgetFactory::widgetTypeSupportsUntilMark() const {
     case WaveformWidgetType::HSV:
     case WaveformWidgetType::Stacked:
     case WaveformWidgetType::Spectrum:
+    case WaveformWidgetType::Envelope:
         return true;
     default:
         break;
@@ -643,6 +644,7 @@ bool WaveformWidgetFactory::widgetTypeSupportsStems() const {
     case WaveformWidgetType::HSV:
     case WaveformWidgetType::Stacked:
     case WaveformWidgetType::Spectrum:
+    case WaveformWidgetType::Envelope:
         return true;
     default:
         break;
@@ -1143,6 +1145,7 @@ void WaveformWidgetFactory::evaluateWidgets() {
             addHandle(collectedHandles, type, waveformWidgetVars<HSVWaveformWidget>());
             break;
         case WaveformWidgetType::Stacked:
+        case WaveformWidgetType::Envelope:
 #ifdef MIXXX_USE_QOPENGL
             addHandle(collectedHandles, type, allshader::WaveformWidget::vars());
             supportedOptions[type] =
@@ -1275,6 +1278,23 @@ WaveformWidgetAbstract* WaveformWidgetFactory::createSpectrumWaveformWidget(
     }
 }
 
+WaveformWidgetAbstract* WaveformWidgetFactory::createEnvelopeWaveformWidget(
+        WWaveformViewer* viewer) {
+    WaveformWidgetBackend backend = getBackendFromConfig();
+
+    switch (backend) {
+    case WaveformWidgetBackend::AllShader:
+#ifdef MIXXX_USE_QOPENGL
+        return createAllshaderWaveformWidget(WaveformWidgetType::Type::Envelope, viewer);
+#endif
+    case WaveformWidgetBackend::None:
+    case WaveformWidgetBackend::GL:
+    case WaveformWidgetBackend::GLSL:
+    default:
+        return new EmptyWaveformWidget(viewer->getGroup(), viewer);
+    }
+}
+
 WaveformWidgetAbstract* WaveformWidgetFactory::createSimpleWaveformWidget(
         WWaveformViewer* viewer) {
     WaveformWidgetBackend backend = getBackendFromConfig();
@@ -1331,6 +1351,9 @@ WaveformWidgetAbstract* WaveformWidgetFactory::createWaveformWidget(
             break;
         case WaveformWidgetType::Stacked:
             pWidget = createStackedWaveformWidget(pViewer);
+            break;
+        case WaveformWidgetType::Envelope:
+            pWidget = createEnvelopeWaveformWidget(pViewer);
             break;
         case WaveformWidgetType::Spectrum:
             pWidget = createSpectrumWaveformWidget(pViewer, options);
@@ -1576,6 +1599,8 @@ QString WaveformWidgetAbstractHandle::getDisplayName(WaveformWidgetType::Type ty
         return QObject::tr("Stacked");
     case WaveformWidgetType::Spectrum:
         return QObject::tr("Spectrum");
+    case WaveformWidgetType::Envelope:
+        return QObject::tr("Envelope");
     default:
         return QObject::tr("Unknown");
     }

@@ -55,6 +55,7 @@ upgradeToAllShaders(int unsafeWaveformType,
         case WWT::HSV:
         case WWT::Stacked:
         case WWT::Spectrum:
+        case WWT::Envelope:
         case WWT::Empty:
             return {static_cast<WaveformWidgetType::Type>(unsafeWaveformType),
                     WaveformWidgetBackend::AllShader,

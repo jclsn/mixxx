@@ -2016,6 +2016,7 @@ if(QOPENGL)
       src/waveform/renderers/allshader/waveformrenderbeat.cpp
       src/waveform/renderers/allshader/waveformrenderer.cpp
       src/waveform/renderers/allshader/waveformrendererendoftrack.cpp
+      src/waveform/renderers/allshader/waveformrendererenvelope.cpp
       src/waveform/renderers/allshader/waveformrendererslipmode.cpp
       src/waveform/renderers/allshader/waveformrendererfiltered.cpp
       src/waveform/renderers/allshader/waveformrendererhsv.cpp

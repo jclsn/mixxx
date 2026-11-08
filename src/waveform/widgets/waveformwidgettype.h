@@ -19,8 +19,10 @@ class WaveformWidgetType {
         Stacked = 16,  // 16 RGB Stacked
         // Values up to 26 were used by removed waveform types, see upgrade.cpp
         Spectrum = 27, // 27 Spectrum colored
-        Invalid,       // Don't use! Used to indicate invalid/unknown type, as
-                       // Count_WaveformWidgetType used to.
+        // 28 Actual wave shape, colored like Spectrum
+        Envelope = 28,
+        Invalid, // Don't use! Used to indicate invalid/unknown type, as
+                 // Count_WaveformWidgetType used to.
     };
     static constexpr std::array kValues = {
             WaveformWidgetType::Empty,
@@ -31,6 +33,7 @@ class WaveformWidgetType {
             WaveformWidgetType::RGB,
             WaveformWidgetType::Stacked,
             WaveformWidgetType::Spectrum,
+            WaveformWidgetType::Envelope,
     };
 };
 

@@ -10,6 +10,7 @@
 #include "waveform/renderers/allshader/waveformrenderbackground.h"
 #include "waveform/renderers/allshader/waveformrenderbeat.h"
 #include "waveform/renderers/allshader/waveformrendererendoftrack.h"
+#include "waveform/renderers/allshader/waveformrendererenvelope.h"
 #include "waveform/renderers/allshader/waveformrendererfiltered.h"
 #include "waveform/renderers/allshader/waveformrendererhsv.h"
 #include "waveform/renderers/allshader/waveformrendererpreroll.h"
@@ -137,6 +138,8 @@ WaveformWidget::addWaveformSignalRenderer(WaveformWidgetType::Type type,
                 true, options); // true for RGB Stacked
     case ::WaveformWidgetType::Spectrum:
         return addWaveformSignalRenderer<WaveformRendererSpectrum>(options);
+    case ::WaveformWidgetType::Envelope:
+        return addWaveformSignalRenderer<WaveformRendererEnvelope>(options);
     default:
         break;
     }
