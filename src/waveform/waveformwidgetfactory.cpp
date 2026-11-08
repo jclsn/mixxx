@@ -41,6 +41,7 @@
 #include "waveform/widgets/rgbwaveformwidget.h"
 #include "waveform/widgets/simplesignalwaveformwidget.h"
 #include "waveform/widgets/softwarewaveformwidget.h"
+#include "waveform/widgets/spectrumwaveformwidget.h"
 #include "waveform/widgets/waveformwidgetabstract.h"
 #include "widget/wvumeterbase.h"
 #include "widget/wvumeterlegacy.h"
@@ -1142,6 +1143,13 @@ void WaveformWidgetFactory::evaluateWidgets() {
             addHandle(collectedHandles, type, waveformWidgetVars<HSVWaveformWidget>());
             break;
         case WaveformWidgetType::Stacked:
+#ifdef MIXXX_USE_QOPENGL
+            addHandle(collectedHandles, type, allshader::WaveformWidget::vars());
+            supportedOptions[type] =
+                    allshader::WaveformWidget::supportedOptions(
+                            type, useGles);
+#endif
+            break;
         case WaveformWidgetType::Spectrum:
 #ifdef MIXXX_USE_QOPENGL
             addHandle(collectedHandles, type, allshader::WaveformWidget::vars());
@@ -1149,6 +1157,7 @@ void WaveformWidgetFactory::evaluateWidgets() {
                     allshader::WaveformWidget::supportedOptions(
                             type, useGles);
 #endif
+            addHandle(collectedHandles, type, waveformWidgetVars<SpectrumWaveformWidget>());
             break;
         default:
             DEBUG_ASSERT(!"Unexpected WaveformWidgetType");
@@ -1250,7 +1259,7 @@ WaveformWidgetAbstract* WaveformWidgetFactory::createStackedWaveformWidget(
 }
 
 WaveformWidgetAbstract* WaveformWidgetFactory::createSpectrumWaveformWidget(
-        WWaveformViewer* viewer) {
+        WWaveformViewer* viewer, WaveformRendererSignalBase::Options options) {
     WaveformWidgetBackend backend = getBackendFromConfig();
 
     switch (backend) {
@@ -1262,7 +1271,7 @@ WaveformWidgetAbstract* WaveformWidgetFactory::createSpectrumWaveformWidget(
     case WaveformWidgetBackend::GL:
     case WaveformWidgetBackend::GLSL:
     default:
-        return new EmptyWaveformWidget(viewer->getGroup(), viewer);
+        return new SpectrumWaveformWidget(viewer->getGroup(), viewer, options);
     }
 }
 
@@ -1324,7 +1333,7 @@ WaveformWidgetAbstract* WaveformWidgetFactory::createWaveformWidget(
             pWidget = createStackedWaveformWidget(pViewer);
             break;
         case WaveformWidgetType::Spectrum:
-            pWidget = createSpectrumWaveformWidget(pViewer);
+            pWidget = createSpectrumWaveformWidget(pViewer, options);
             break;
         default:
             pWidget = new EmptyWaveformWidget(pViewer->getGroup(), pViewer);
