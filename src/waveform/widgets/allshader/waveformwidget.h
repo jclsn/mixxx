@@ -57,8 +57,8 @@ class allshader::WaveformWidget final : public ::WGLWidget,
             options = ::WaveformRendererSignalBase::Option::HighDetail;
             break;
         case WaveformWidgetType::Type::Spectrum:
-            options = ::WaveformRendererSignalBase::Option::SplitStereoSignal;
-            break;
+            // Not textured, so high detail works on OpenGL ES as well
+            return ::WaveformRendererSignalBase::Option::AllOptionsCombined;
         default:
             break;
         }

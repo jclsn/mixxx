@@ -663,7 +663,9 @@ void DlgPrefWaveform::updateWaveformTypeOptions(bool useWaveform) {
     splitLeftRightCheckBox->setEnabled(useWaveform &&
             (supportedOptions &
                     allshader::WaveformRendererSignalBase::Option::SplitStereoSignal));
-    highDetailCheckBox->setEnabled(useWaveform && !qmlMode &&
+    // Only the spectrum waveform supports high detail on the scene graph
+    highDetailCheckBox->setEnabled(useWaveform &&
+            (!qmlMode || type == WaveformWidgetType::Spectrum) &&
             (supportedOptions &
                     allshader::WaveformRendererSignalBase::Option::HighDetail));
     splitLeftRightCheckBox->setChecked(splitLeftRightCheckBox->isEnabled() &&

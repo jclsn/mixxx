@@ -7,11 +7,24 @@
 #include "rendergraph/vertexupdaters/rgbavertexupdater.h"
 #include "track/track.h"
 #include "util/math.h"
+#include "waveform/highresolutionwaveform.h"
 #include "waveform/renderers/waveformspectrumcolor.h"
 #include "waveform/renderers/waveformwidgetrenderer.h"
 #include "waveform/waveform.h"
 
 using namespace rendergraph;
+
+namespace {
+
+const WaveformFilteredData& filtered(const WaveformData& data) {
+    return data.filtered;
+}
+
+const WaveformFilteredData& filtered(const WaveformFilteredData& data) {
+    return data;
+}
+
+} // namespace
 
 namespace allshader {
 
@@ -19,7 +32,8 @@ WaveformRendererSpectrum::WaveformRendererSpectrum(WaveformWidgetRenderer* wavef
         ::WaveformRendererSignalBase::Options options)
         : WaveformRendererSignalBase(waveformWidget, options),
           m_splitStereoSignal(options.testFlag(
-                  ::WaveformRendererSignalBase::Option::SplitStereoSignal)) {
+                  ::WaveformRendererSignalBase::Option::SplitStereoSignal)),
+          m_highDetail(options.testFlag(::WaveformRendererSignalBase::Option::HighDetail)) {
     initForRectangles<RGBAMaterial>(0);
     setUsePreprocess(true);
 }
@@ -65,6 +79,35 @@ bool WaveformRendererSpectrum::preprocessInner() {
     }
 #endif
 
+    // The analysis waveform is too coarse when a visual frame spans more
+    // than a pixel, use the high resolution one then once it is available
+    if (m_highDetail && m_waveformRenderer->getVisualSamplePerPixel() < 1.0) {
+        ConstHighResolutionWaveformPointer pHighResolution = highResolutionWaveform(pTrack);
+        if (pHighResolution && pHighResolution->getDataSize() > 1) {
+            return drawColumns(pHighResolution->data(), pHighResolution->getDataSize());
+        }
+    }
+
+    return drawColumns(data, dataSize);
+}
+
+ConstHighResolutionWaveformPointer WaveformRendererSpectrum::highResolutionWaveform(
+        const TrackPointer& pTrack) {
+    const QString location = pTrack->getLocation();
+    if (location != m_highResolutionLocation) {
+        m_highResolutionLocation = location;
+        m_pHighResolutionWaveform.reset();
+    }
+
+    if (!m_pHighResolutionWaveform) {
+        m_pHighResolutionWaveform = highResolutionWaveformCache::request(pTrack);
+    }
+
+    return m_pHighResolutionWaveform;
+}
+
+template<typename Data>
+bool WaveformRendererSpectrum::drawColumns(const Data* data, int dataSize) {
     const float devicePixelRatio = m_waveformRenderer->getDevicePixelRatio();
     const int length = static_cast<int>(m_waveformRenderer->getLength());
     const int pixelLength = static_cast<int>(m_waveformRenderer->getLength() * devicePixelRatio);
@@ -140,12 +183,12 @@ bool WaveformRendererSpectrum::preprocessInner() {
             float maxAllU = 0.0f;
             // data is interleaved left / right
             for (int i = visualIndexStart + chn; i < visualIndexStop + chn; i += 2) {
-                const WaveformData& waveformData = data[i];
+                const WaveformFilteredData& waveformData = filtered(data[i]);
 
-                maxLowU = math_max(maxLowU, static_cast<float>(waveformData.filtered.low));
-                maxMidU = math_max(maxMidU, static_cast<float>(waveformData.filtered.mid));
-                maxHighU = math_max(maxHighU, static_cast<float>(waveformData.filtered.high));
-                maxAllU = math_max(maxAllU, static_cast<float>(waveformData.filtered.all));
+                maxLowU = math_max(maxLowU, static_cast<float>(waveformData.low));
+                maxMidU = math_max(maxMidU, static_cast<float>(waveformData.mid));
+                maxHighU = math_max(maxHighU, static_cast<float>(waveformData.high));
+                maxAllU = math_max(maxAllU, static_cast<float>(waveformData.all));
             }
 
             maxLow[chn] = maxLowU * lowGain;

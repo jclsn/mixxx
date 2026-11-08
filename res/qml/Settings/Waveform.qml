@@ -411,12 +411,12 @@ Category {
                 Layout.fillWidth: true
 
                 WaveformSettingParameter {
-                    label: "High detail (legacy)"
+                    label: "High detail"
                 }
                 RatioChoice {
                     id: highDetailInput
 
-                    enabled: false
+                    enabled: root.waveformTypes[waveformTypeInput.currentIndex] === Mixxx.WaveformDisplay.Type.Spectrum
                     options: ["on", "off"]
 
                     onSelectedChanged: root.markDirty()
@@ -425,7 +425,7 @@ Category {
             Text {
                 Layout.fillWidth: true
                 color: Theme.midGray
-                text: "High detail is retained for compatibility but is unavailable in the QML scene-graph renderer."
+                text: "High detail is used by the Spectrum renderer. It is unavailable for the other QML scene-graph renderers."
                 wrapMode: Text.WordWrap
             }
             RowLayout {
