@@ -256,7 +256,10 @@ void QmlWaveformOverview::paint(QPainter* pPainter) {
             drawHsv(pPainter, m_channels, pWaveform, currentCompletion);
             break;
         case Renderer::Spectrum:
-            drawSpectrum(pPainter, m_channels, pWaveform, currentCompletion);
+            drawSpectrum(pPainter, m_channels, pWaveform, currentCompletion, false);
+            break;
+        case Renderer::Envelope:
+            drawSpectrum(pPainter, m_channels, pWaveform, currentCompletion, true);
             break;
         default:
             drawRgb(pPainter, m_channels, pWaveform, currentCompletion);
@@ -409,7 +412,8 @@ void QmlWaveformOverview::drawHsv(QPainter* pPainter,
 void QmlWaveformOverview::drawSpectrum(QPainter* pPainter,
         Channels channels,
         ConstWaveformPointer pWaveform,
-        int completion) const {
+        int completion,
+        bool envelope) const {
     const double offsetX = completion / 2.0;
     const int leftAll = pWaveform->getAll(completion);
     const int rightAll = pWaveform->getAll(completion + 1);
@@ -425,20 +429,24 @@ void QmlWaveformOverview::drawSpectrum(QPainter* pPainter,
             static_cast<float>(pWaveform->getHigh(completion) +
                     pWaveform->getHigh(completion + 1)));
     const float amplitude = static_cast<float>(std::max(leftAll, rightAll)) / 255.f;
-    const QVector3D color = waveformSpectrumColor::color(spectralPosition) *
-            waveformSpectrumColor::brightness(amplitude);
+    // The Envelope overview uses solid columns in the full spectrum color
+    const QVector3D color = envelope
+            ? waveformSpectrumColor::color(spectralPosition)
+            : waveformSpectrumColor::color(spectralPosition) *
+                    waveformSpectrumColor::brightness(amplitude);
+    const auto drawColumn = envelope ? waveformOverviewRenderer::drawEnvelopeColumn
+                                     : waveformOverviewRenderer::drawSpectrumColumn;
 
     if (!m_stereo) {
-        waveformOverviewRenderer::drawSpectrumColumn(
-                pPainter, offsetX, 0, leftAll + rightAll, color);
+        drawColumn(pPainter, offsetX, 0, leftAll + rightAll, color);
         return;
     }
 
     if (channels.testFlag(ChannelFlag::LeftChannel)) {
-        waveformOverviewRenderer::drawSpectrumColumn(pPainter, offsetX, 0, -leftAll, color);
+        drawColumn(pPainter, offsetX, 0, -leftAll, color);
     }
     if (channels.testFlag(ChannelFlag::RightChannel)) {
-        waveformOverviewRenderer::drawSpectrumColumn(pPainter, offsetX, 0, rightAll, color);
+        drawColumn(pPainter, offsetX, 0, rightAll, color);
     }
 }
 

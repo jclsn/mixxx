@@ -52,6 +52,7 @@ class QmlWaveformOverview : public QQuickPaintedItem {
         Filtered = 2,
         HSV = 3,
         Spectrum = 4,
+        Envelope = 5,
     };
     Q_ENUM(Renderer)
 
@@ -122,7 +123,8 @@ class QmlWaveformOverview : public QQuickPaintedItem {
     void drawSpectrum(QPainter* pPainter,
             Channels channels,
             ConstWaveformPointer pWaveform,
-            int completion) const;
+            int completion,
+            bool envelope) const;
     void drawMinuteMarkers(QPainter* pPainter, double duration) const;
     QColor getRgbPenColor(ConstWaveformPointer pWaveform, int completion) const;
     QColor getRgbPenColor(qreal low, qreal mid, qreal high) const;
