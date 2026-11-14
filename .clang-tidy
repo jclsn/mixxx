@@ -2,6 +2,7 @@
 Checks: >-
   -*,
   google-readability-namespace-comments,
+  misc-unused-parameters,
   modernize-use-bool-literals,
   modernize-use-nullptr,
   modernize-use-override,
