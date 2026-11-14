@@ -54,9 +54,9 @@ void EngineBufferScaleST::setScaleParameters(double base_rate,
     // It's an error to pass a rate or tempo smaller than MIN_SEEK_SPEED to
     // SoundTouch (see definition of MIN_SEEK_SPEED for more details).
     double speed_abs = fabs(*pTempoRatio);
-    if (speed_abs > MAX_SEEK_SPEED) {
-        speed_abs = MAX_SEEK_SPEED;
-    } else if (speed_abs < MIN_SEEK_SPEED) {
+    if (speed_abs > kMaxSeekSpeed) {
+        speed_abs = kMaxSeekSpeed;
+    } else if (speed_abs < kMinSeekSpeed) {
         speed_abs = 0;
     }
 

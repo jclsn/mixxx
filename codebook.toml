@@ -1,0 +1,15 @@
+words = [
+    "DISABLEENABLE",
+    "ENABLEDISABLEENABLE",
+    "Rubberband",
+    "Syncable",
+    "Syncables",
+    "constexpr",
+    "crossfade",
+    "crossfading",
+    "newpos",
+    "pauselock",
+    "playbutton",
+    "playpos",
+    "seeked",
+]
